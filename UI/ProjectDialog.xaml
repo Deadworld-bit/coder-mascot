@@ -1,0 +1,427 @@
+<Window x:Class="CoderMascot.UI.ProjectDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Repository"
+        Width="660" Height="700"
+        MinWidth="580" MinHeight="520"
+        Background="{StaticResource Page}"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+
+        <Style x:Key="Muted" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Faint}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <Style x:Key="SectionHead" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Faint}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,18,0,6" />
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="7,6" />
+            <Setter Property="Background" Value="{StaticResource Well}" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="CaretBrush" Value="{StaticResource Ink}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style TargetType="PasswordBox">
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="7,6" />
+            <Setter Property="Background" Value="{StaticResource Well}" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="CaretBrush" Value="{StaticResource Ink}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Background" Value="{StaticResource Well}" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        </Style>
+
+        <Style TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="Background" Value="{StaticResource Line}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Edge}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" CornerRadius="5"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Edge}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource Pick}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Pick}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="Danger" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource BadTint}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BadEdge}" />
+            <Setter Property="Foreground" Value="{StaticResource BadInk}" />
+        </Style>
+
+        <!-- Quiet enough to sit inside a row without competing with it. -->
+        <Style x:Key="Slight" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource Card}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+            <Setter Property="Foreground" Value="{StaticResource Faint}" />
+            <Setter Property="Padding" Value="9,4" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- header -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Head}" Padding="22,14"
+                BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+            <StackPanel>
+                <TextBlock x:Name="HeadTitle" Text="Add a repository" FontSize="15" FontWeight="SemiBold" />
+                <TextBlock x:Name="HeadDetail" Style="{StaticResource Muted}" Margin="0,4,0,0"
+                           Text="Where the checkout is, and which of its branches your CI deploys from." />
+            </StackPanel>
+        </Border>
+
+        <!-- footer: the destructive action kept well away from the one you press most -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Head}" Padding="22,14"
+                BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+            <Grid>
+                <Button x:Name="BtnRemove" Content="Remove this repository" Style="{StaticResource Danger}"
+                        HorizontalAlignment="Left" Click="OnRemove" Visibility="Collapsed"
+                        ToolTip="Stops watching it. Nothing on disk is touched." />
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock x:Name="SaveNote" Style="{StaticResource Muted}" VerticalAlignment="Center"
+                               Margin="0,0,12,0" MaxWidth="300" TextTrimming="CharacterEllipsis" />
+                    <Button Content="Cancel" Click="OnCancel" Margin="0,0,8,0" IsCancel="True" />
+                    <Button x:Name="BtnSave" Content="Save" Style="{StaticResource Primary}"
+                            Click="OnSave" IsDefault="True" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="22,4,22,18">
+            <StackPanel>
+
+                <!-- 1 · where -->
+                <TextBlock Text="WHERE IT LIVES" Style="{StaticResource SectionHead}" Margin="0,14,0,6" />
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="HostRemote" Content="From a git URL" IsChecked="True"
+                                 GroupName="Host" Checked="OnHostChanged" Margin="0,0,20,0"
+                                 ToolTip="Fetch a copy once, then read it locally — nothing to clone yourself" />
+                    <RadioButton x:Name="HostWorkspace" Content="In the workspace" GroupName="Host"
+                                 Checked="OnHostChanged" Margin="0,0,20,0"
+                                 ToolTip="Read over coder ssh, using the workspace this app is already watching" />
+                    <RadioButton x:Name="HostLocal" Content="On this PC" GroupName="Host"
+                                 Checked="OnHostChanged"
+                                 ToolTip="A clone in a folder on this Windows machine" />
+                </StackPanel>
+                <TextBlock x:Name="HostNote" Style="{StaticResource Muted}" Margin="0,8,0,0" />
+
+                <!-- 2 · folder -->
+                <TextBlock x:Name="PathHead" Text="FOLDER" Style="{StaticResource SectionHead}" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox Grid.Column="0" x:Name="PathBox" FontFamily="Consolas"
+                             TextChanged="OnPathTyped" LostFocus="OnPathLeft" />
+                    <Button Grid.Column="1" x:Name="BtnFind" Content="Find…" Margin="8,0,0,0"
+                            Click="OnFind" />
+                </Grid>
+                <TextBlock x:Name="PathNote" Style="{StaticResource Muted}" Margin="0,5,0,0" />
+
+                <!-- discovered checkouts, listed rather than dropped down, so the
+                     whole path is readable before it is chosen -->
+                <Border x:Name="FoundPanel" Visibility="Collapsed" Margin="0,8,0,0"
+                        Background="{StaticResource Well}" BorderBrush="{StaticResource Line}"
+                        BorderThickness="1" CornerRadius="8">
+                    <StackPanel>
+                        <Grid Margin="12,8,12,6">
+                            <TextBlock x:Name="FoundNote" Style="{StaticResource Muted}"
+                                       VerticalAlignment="Center" Margin="0,0,70,0" />
+                            <Button Content="Hide" Style="{StaticResource Slight}" Click="OnHideFound"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+                        <ItemsControl x:Name="FoundList" MaxHeight="176" Margin="0,0,0,6">
+                            <ItemsControl.Template>
+                                <ControlTemplate TargetType="ItemsControl">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </ControlTemplate>
+                            </ItemsControl.Template>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Click="OnPickFound" Cursor="Hand" Background="Transparent"
+                                            BorderThickness="0" HorizontalContentAlignment="Stretch"
+                                            Padding="12,6" ToolTip="{Binding}">
+                                        <TextBlock Text="{Binding}" FontFamily="Consolas" FontSize="11.5"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- what the check found: the only thing here the form can't know by itself -->
+                <Border x:Name="StatusPanel" Margin="0,10,0,0" CornerRadius="8" Padding="12,9"
+                        Background="{StaticResource Card}" BorderBrush="{StaticResource Line}"
+                        BorderThickness="1" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="3" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Bled out through the card's own padding: the left
+                             margin moves it, the right one gives the width back,
+                             or the column swallows it and nothing is drawn. -->
+                        <Border Grid.Column="0" x:Name="StatusStripe" Background="{StaticResource Line}"
+                                Margin="-12,-9,12,-9" />
+
+                        <StackPanel Grid.Column="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock x:Name="StatusText" TextWrapping="Wrap"
+                                           VerticalAlignment="Center" />
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                            VerticalAlignment="Center" Margin="10,0,0,0">
+                                    <Button x:Name="BtnTest" Content="Test connection"
+                                            Style="{StaticResource Slight}" Click="OnTest"
+                                            Margin="0,0,6,0"
+                                            ToolTip="Ask the server whether it can be reached and signed in to. Downloads nothing." />
+                                    <!-- Its own button, always there for a URL
+                                         repository. It used to be the same button
+                                         as "Check again", relabelled by whichever
+                                         one the app guessed you wanted — so when
+                                         the guess was wrong, the action you needed
+                                         was not on screen at all. -->
+                                    <Button x:Name="BtnDownload" Content="Download"
+                                            Style="{StaticResource Slight}" Click="OnDownload"
+                                            Margin="0,0,6,0" Visibility="Collapsed"
+                                            ToolTip="Fetch from the server into this app's own copy. Safe to press again — it updates the copy you already have." />
+                                    <Button x:Name="BtnCheck" Content="Check again"
+                                            Style="{StaticResource Slight}" Click="OnCheck"
+                                            ToolTip="Read the copy that is already on this PC. Touches the network only if there is nothing to read yet." />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- The friendly sentence above is a translation, and
+                                 a translation loses what identifies the fault.
+                                 This is what git actually said. -->
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button x:Name="BtnDetails" Content="Show what git said"
+                                        Style="{StaticResource Slight}" Click="OnDetails" />
+                                <Button x:Name="BtnSaveLog" Content="Save to a file"
+                                        Style="{StaticResource Slight}" Click="OnSaveLog"
+                                        Margin="6,0,0,0" Visibility="Collapsed" />
+                            </StackPanel>
+
+                            <TextBox x:Name="DetailBox" Visibility="Collapsed" Margin="0,8,0,0"
+                                     IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                                     MaxHeight="190" Background="{StaticResource Well}"
+                                     TextWrapping="NoWrap" AcceptsReturn="True"
+                                     VerticalScrollBarVisibility="Auto"
+                                     HorizontalScrollBarVisibility="Auto" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- sign-in, for a private server git can't already get into -->
+                <StackPanel x:Name="SignInPanel" Visibility="Collapsed">
+                    <TextBlock Text="SIGN IN" Style="{StaticResource SectionHead}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                               Text="Only needed for a private server. Leave both blank if you already clone this repository on this PC — Git will use the sign-in it already has. Most servers want both: on GitLab, your username and a personal access token with read access. What you type is handed to Git's own credential store (Windows Credential Manager), never kept in this app's settings." />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="1.6*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Username" Style="{StaticResource Muted}" Margin="0,0,0,4" />
+                            <TextBox x:Name="UserBox" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Password or access token"
+                                       Style="{StaticResource Muted}" Margin="0,0,0,4" />
+                            <PasswordBox x:Name="SecretBox" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock x:Name="SignInNote" Style="{StaticResource Muted}" Margin="0,6,0,0" />
+                </StackPanel>
+
+                <!-- 3 · name -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition Width="230" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="NAME" Style="{StaticResource SectionHead}" />
+                        <TextBox x:Name="NameBox" TextChanged="OnNameTyped" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,5,0,0"
+                                   Text="What it's called in the sidebar. Taken from the folder unless you change it." />
+                    </StackPanel>
+
+                    <!-- Editable on purpose: the list is what you already use, so
+                         joining a group is a pick and not a retype that might not
+                         match, but a new heading is just typing one. -->
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="GROUP" Style="{StaticResource SectionHead}" />
+                        <ComboBox x:Name="GroupBox" IsEditable="True" KeyDown="OnGroupKey" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,5,0,0"
+                                   Text="The heading it sits under in the sidebar. Leave it blank and it stays outside the groups." />
+                    </StackPanel>
+                </Grid>
+
+                <!-- 4 · deploy branches -->
+                <TextBlock Text="DEPLOY BRANCHES" Style="{StaticResource SectionHead}" />
+                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                           Text="The branches your CI deploys from. Every other branch is measured against these — that is how the window answers &quot;is my work live yet?&quot;. Pick from the list once the folder checks out, or type a branch that doesn't exist here yet." />
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="8" />
+                        <ColumnDefinition Width="180" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <ComboBox Grid.Column="0" x:Name="BranchPick" IsEditable="True"
+                              KeyDown="OnBranchKey" />
+                    <ComboBox Grid.Column="2" x:Name="EnvBox" IsEditable="True"
+                              FontFamily="Segoe UI" FontSize="12.5" KeyDown="OnBranchKey"
+                              ToolTip="What reaching that branch means — production, staging, whatever you call it. Type your own if none of these fit." />
+                    <Button Grid.Column="3" x:Name="BtnAddTarget" Content="Add" Margin="8,0,0,0"
+                            Click="OnAddTarget" />
+                </Grid>
+                <TextBlock x:Name="AddNote" Style="{StaticResource Muted}" Margin="0,5,0,0" />
+
+                <ItemsControl x:Name="TargetList" Margin="0,10,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource Card}" BorderBrush="{StaticResource Line}"
+                                    BorderThickness="1" CornerRadius="8" Margin="0,0,0,6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="4" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Background="{Binding Accent}"
+                                            CornerRadius="7,0,0,7" />
+
+                                    <StackPanel Grid.Column="1" Margin="12,8,10,8" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Branch}" FontFamily="Consolas"
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Branch}" />
+                                            <Border Background="{StaticResource DeployTint}" CornerRadius="5" Padding="6,1"
+                                                    Margin="8,0,0,0" VerticalAlignment="Center"
+                                                    Visibility="{Binding PrimaryShown}"
+                                                    ToolTip="The ↑↓ counts on every branch are measured against this one">
+                                                <TextBlock Text="counted against" FontSize="11"
+                                                           Foreground="{StaticResource DeployInk}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Hint}" Style="{StaticResource Muted}"
+                                                   Margin="0,3,0,0" Visibility="{Binding HintShown}"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Hint}" />
+                                    </StackPanel>
+
+                                    <TextBox Grid.Column="2" Margin="0,8,8,8" VerticalAlignment="Center"
+                                             Text="{Binding Target.Environment, Mode=TwoWay,
+                                                    UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="What it means when something reaches this branch" />
+
+                                    <StackPanel Grid.Column="3" Orientation="Horizontal"
+                                                VerticalAlignment="Center" Margin="0,0,10,0">
+                                        <Button Content="Count against this" Style="{StaticResource Slight}"
+                                                Click="OnMakePrimary" Margin="0,0,6,0"
+                                                Visibility="{Binding MakePrimaryShown}" />
+                                        <Button Content="Remove" Style="{StaticResource Slight}"
+                                                Click="OnRemoveTarget" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock x:Name="TargetsEmpty" Style="{StaticResource Muted}" Margin="0,4,0,0"
+                           Visibility="Collapsed" />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

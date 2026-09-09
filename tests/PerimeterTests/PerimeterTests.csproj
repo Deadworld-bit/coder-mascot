@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Plain net8.0, not net8.0-windows: Core/Perimeter.cs is deliberately free
+       of WPF types so the patrol geometry can be verified on Linux/CI, where
+       the app itself cannot even run. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>CoderMascot.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Core/Perimeter.cs" />
+    <Compile Include="../../Core/Pose.cs" />
+    <Compile Include="../../Core/Character.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+
+</Project>

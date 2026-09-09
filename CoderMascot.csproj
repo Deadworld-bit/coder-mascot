@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>CoderMascot</RootNamespace>
+    <AssemblyName>CoderMascot</AssemblyName>
+    <ApplicationIcon>Assets/app.ico</ApplicationIcon>
+
+    <!-- Lets this project compile on Linux/macOS (CI, or a Coder workspace).
+         The produced binary still only RUNS on Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!-- WPF cannot run in globalization-invariant mode. Its markup layer resolves
+       a CultureInfo from XmlLanguage ("en-US") to format text, and with
+       PredefinedCulturesOnly — which InvariantGlobalization turns on — that
+       throws CultureNotFoundException. The window itself is an image and a
+       coloured dot, so the app starts and patrols perfectly; it dies the first
+       time anything draws *text*: the right-click menu, the dashboard, a speech
+       bubble. That is a build setting producing a runtime crash three clicks
+       away from launch, so the build refuses it outright.
+
+       The Linux build box has no libicu and needs
+       DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 in the *environment* — that
+       applies to the SDK doing the building, and must never be baked into the
+       app being built. -->
+  <Target Name="RefuseInvariantGlobalization" BeforeTargets="Build;Publish"
+          Condition="'$(InvariantGlobalization)' == 'true'">
+    <Error Text="InvariantGlobalization breaks WPF: every menu and window that draws text throws CultureNotFoundException. Export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 for the build host instead of setting this property." />
+  </Target>
+
+  <!-- tests/ is its own project and links Core sources directly; the app's
+       default glob must not also compile them. -->
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <None Remove="tests/**" />
+  </ItemGroup>
+
+  <!-- Sprite frames are compiled into the assembly (Resource), not copied
+       beside the exe, so a single-file publish stays single-file and the app
+       can never run with its artwork missing. Regenerate them with
+       tools/extract_sprites.py; Asset/ holds the original sheet and is not
+       shipped. -->
+  <ItemGroup>
+    <Resource Include="Assets/sprites/**/*.png" />
+  </ItemGroup>
+
+  <!-- Single-file packaging only when a RID is given (i.e. `publish -r win-x64`).
+       Leaving these unconditional makes a plain `dotnet build` on Linux try to
+       resolve a linux-x64 WindowsDesktop runtime pack, which does not exist. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+</Project>

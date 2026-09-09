@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Deliberately targets plain net8.0, not net8.0-windows: CoderConfig is
+       portable logic, so these checks run anywhere, including a Linux Coder
+       workspace or CI, without a Windows machine. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>CoderMascot.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Core/CoderConfig.cs" />
+    <Compile Include="../../Core/Character.cs" />
+    <Compile Include="../../Core/LoadWatch.cs" />
+    <Compile Include="../../Core/Reminder.cs" />
+    <Compile Include="../../Core/AlertGate.cs" />
+    <Compile Include="../../Core/MascotState.cs" />
+    <Compile Include="../../Core/SessionLine.cs" />
+    <Compile Include="../../Core/DevServer.cs" />
+    <Compile Include="../../Core/LeftoverWatch.cs" />
+    <Compile Include="../../Core/StateHistory.cs" />
+    <Compile Include="../../Core/NoteBook.cs" />
+    <Compile Include="../../Core/StickyNote.cs" />
+    <Compile Include="../../Core/Hotkey.cs" />
+    <Compile Include="../../Core/LocalPorts.cs" />
+    <Compile Include="../../Core/GitModel.cs" />
+    <Compile Include="../../Core/ProjectDraft.cs" />
+    <Compile Include="../../Core/GitUrl.cs" />
+    <Compile Include="../../Core/MirrorStore.cs" />
+    <Compile Include="../../Core/GitSignIn.cs" />
+    <Compile Include="../../Core/GitCommand.cs" />
+    <Compile Include="../../Core/GitLog.cs" />
+    <Compile Include="../../Core/ProcessText.cs" />
+    <Compile Include="../../Core/GitParse.cs" />
+    <Compile Include="../../Core/GitRefs.cs" />
+    <Compile Include="../../Core/ProjectGroup.cs" />
+    <Compile Include="../../Core/GitReader.cs" />
+    <Compile Include="../../Core/GitCli.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+
+</Project>

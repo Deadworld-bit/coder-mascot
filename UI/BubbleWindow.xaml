@@ -1,0 +1,33 @@
+<Window x:Class="CoderMascot.UI.BubbleWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Coder Mascot"
+        SizeToContent="Height"
+        Width="256"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        ShowActivated="False"
+        UseLayoutRounding="True">
+
+    <!-- Its own window rather than part of the mascot: the mascot is 120px and
+         walks into screen corners, so a bubble baked into that window would be
+         clipped off-screen exactly when it has something to say. -->
+    <Border CornerRadius="12"
+            Padding="12,9"
+            Background="#F21E293B"
+            BorderBrush="#4DFFFFFF" BorderThickness="1">
+        <StackPanel>
+            <TextBlock x:Name="BubbleTitle"
+                       FontFamily="Segoe UI" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="#FFFFFF" TextWrapping="Wrap" />
+            <TextBlock x:Name="BubbleBody"
+                       Margin="0,3,0,0"
+                       FontFamily="Segoe UI" FontSize="11.5"
+                       Foreground="#CBD5E1" TextWrapping="Wrap" />
+        </StackPanel>
+    </Border>
+</Window>

@@ -1,0 +1,61 @@
+<!--
+    The colours, once, for every window.
+
+    They used to be declared separately in each of the three windows, which is
+    how the app ended up with two families of dark blue and five ambers: three
+    copies of a palette drift apart one edit at a time. The values here and the
+    constants in UI/Tone.cs are the same palette, and the reasoning for it lives
+    in that file.
+
+    Brushes only. The keyed and implicit styles stay with their windows, because
+    an implicit style promoted to application scope would repaint the mascot, the
+    bubble and the sticky notes as well.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- surfaces, deepest first -->
+    <SolidColorBrush x:Key="Well" Color="#070B12" />
+    <SolidColorBrush x:Key="Rail" Color="#0A0F1A" />
+    <SolidColorBrush x:Key="Sunk" Color="#0C121D" />
+    <SolidColorBrush x:Key="Page" Color="#0F172A" />
+    <SolidColorBrush x:Key="Head" Color="#131C2E" />
+    <SolidColorBrush x:Key="Row"  Color="#18202F" />
+    <SolidColorBrush x:Key="Card" Color="#1E293B" />
+    <SolidColorBrush x:Key="Lift" Color="#273449" />
+
+    <!-- lines -->
+    <SolidColorBrush x:Key="Hair" Color="#1B2436" />
+    <SolidColorBrush x:Key="Line" Color="#334155" />
+    <SolidColorBrush x:Key="Edge" Color="#475569" />
+
+    <!-- text -->
+    <SolidColorBrush x:Key="Ink"   Color="#E2E8F0" />
+    <SolidColorBrush x:Key="Ink2"  Color="#CBD5E1" />
+    <SolidColorBrush x:Key="Faint" Color="#94A3B8" />
+    <SolidColorBrush x:Key="Dim"   Color="#64748B" />
+
+    <!-- selection and keyboard focus, and nothing else -->
+    <SolidColorBrush x:Key="Pick" Color="#3B82F6" />
+
+    <!-- meanings -->
+    <SolidColorBrush x:Key="Deploy"     Color="#818CF8" />
+    <SolidColorBrush x:Key="DeployTint" Color="#232A5E" />
+    <SolidColorBrush x:Key="DeployInk"  Color="#C7D2FE" />
+    <SolidColorBrush x:Key="Partly"     Color="#FBBF24" />
+    <SolidColorBrush x:Key="PartlyTint" Color="#3A2A0E" />
+    <SolidColorBrush x:Key="PartlyInk"  Color="#FDE68A" />
+    <SolidColorBrush x:Key="Shipped"    Color="#4ADE80" />
+    <SolidColorBrush x:Key="Bad"        Color="#F87171" />
+    <SolidColorBrush x:Key="BadTint"    Color="#2C1517" />
+    <SolidColorBrush x:Key="BadInk"     Color="#FECACA" />
+    <SolidColorBrush x:Key="BadEdge"    Color="#8B2A2A" />
+    <SolidColorBrush x:Key="WarnTint"   Color="#33240E" />
+    <SolidColorBrush x:Key="WarnInk"    Color="#FDE68A" />
+    <SolidColorBrush x:Key="WarnEdge"   Color="#B45309" />
+
+    <!-- the two load bars -->
+    <SolidColorBrush x:Key="Cpu" Color="#38BDF8" />
+    <SolidColorBrush x:Key="Mem" Color="#A78BFA" />
+
+</ResourceDictionary>

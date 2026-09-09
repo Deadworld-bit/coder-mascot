@@ -1,0 +1,632 @@
+<Window x:Class="CoderMascot.UI.DashboardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Coder Mascot"
+        Width="620" Height="760"
+        MinWidth="520" MinHeight="480"
+        Background="{StaticResource Page}"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="True"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
+        </Style>
+
+        <Style x:Key="Muted" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Faint}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style x:Key="SectionHead" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Faint}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,16,0,8" />
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="Background" Value="{StaticResource Line}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Edge}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="9,4" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" CornerRadius="5"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Edge}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="4,3" />
+        </Style>
+
+        <!-- One card per section. -->
+        <Style x:Key="CardBorder" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource Card}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="14,12" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- header -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Head}" Padding="16,12"
+                BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Ellipse x:Name="StatePip" Grid.Column="0" Width="14" Height="14"
+                         Fill="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="HeadTitle" Text="Checking…" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock x:Name="HeadDetail" Style="{StaticResource Muted}"
+                               Text="" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Check now" Click="OnCheckNow" Margin="0,0,6,0" />
+                    <Button Content="Open Coder" Click="OnOpenCoder" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Four unrelated things were stacked in one scroll: a scratchpad, live
+             status, a port list and a settings form. Reaching the last of them
+             meant scrolling past the other three, and every heading had scrolled
+             off the top by the time you arrived. They are tabs now — and the
+             counts sit on the tabs, so you can tell whether one is worth opening
+             without opening it. -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Rail}" Padding="4,0"
+                BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+            <ItemsControl x:Name="TabStrip">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Click="OnPickTab" Cursor="Hand" Background="Transparent"
+                                BorderThickness="0" Padding="0" Margin="0,0,4,0"
+                                ToolTip="{Binding Tip}">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="12,11,12,9">
+                                    <TextBlock Text="{Binding Title}" FontSize="13"
+                                               FontWeight="{Binding Weight}"
+                                               Foreground="{Binding Ink}" />
+                                    <Border Background="{Binding BadgeBack}" CornerRadius="8"
+                                            Padding="6,1" Margin="8,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding BadgeShown}">
+                                        <TextBlock Text="{Binding Badge}" FontSize="11"
+                                                   Foreground="{Binding BadgeInk}" />
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- Which tab you are on, marked by position as
+                                     well as colour: an underline survives not
+                                     being able to tell two greys apart. -->
+                                <Border Height="2" Background="{Binding Mark}" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+
+        <Grid>
+            <ScrollViewer x:Name="TabStatus" VerticalScrollBarVisibility="Auto"
+                          Padding="16,10,16,16" Visibility="Collapsed">
+                <StackPanel>
+                <!-- workspace -->
+                <TextBlock Text="WORKSPACE" Style="{StaticResource SectionHead}" />
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <TextBlock x:Name="WorkspaceFacts" Style="{StaticResource Muted}"
+                                   TextWrapping="Wrap" Text="—" />
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button x:Name="BtnStart" Content="Start" Click="OnStartWorkspace" Margin="0,0,6,0" />
+                            <Button x:Name="BtnStop" Content="Stop" Click="OnStopWorkspace" Margin="0,0,6,0" />
+                            <Button x:Name="BtnRestart" Content="Restart" Click="OnRestartWorkspace" Margin="0,0,6,0" />
+                            <Button x:Name="BtnLogin" Content="coder login" Click="OnCoderLogin" Margin="0,0,6,0" />
+                            <Button Content="Connect…" Click="OnShowSetup"
+                                    ToolTip="Set the Coder address and session token from here" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Claude sessions -->
+                <TextBlock Text="CLAUDE SESSIONS" Style="{StaticResource SectionHead}" />
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <TextBlock x:Name="SessionsEmpty" Style="{StaticResource Muted}"
+                                   Text="No sessions." Visibility="Collapsed" TextWrapping="Wrap" />
+                        <ItemsControl x:Name="SessionList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Ellipse Grid.Column="0" Width="9" Height="9" Margin="0,0,8,0"
+                                                 VerticalAlignment="Center" Fill="{Binding Pip}" />
+
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="{Binding Folder}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Activity}" Style="{StaticResource Muted}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="2" Text="{Binding Age}"
+                                                   Style="{StaticResource Muted}"
+                                                   VerticalAlignment="Center" Margin="8,0" />
+
+                                        <Button Grid.Column="3" Content="Go to it" Click="OnGoToSession"
+                                                VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- this machine -->
+                <TextBlock Text="THIS MACHINE" Style="{StaticResource SectionHead}" />
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="CPU" Style="{StaticResource Muted}" />
+                            <Border Grid.Column="1" Height="8" CornerRadius="4" Background="{StaticResource Well}"
+                                    HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                                <Border x:Name="CpuBar" HorizontalAlignment="Left" CornerRadius="4"
+                                        Background="{StaticResource Cpu}" Width="0" />
+                            </Border>
+                            <TextBlock Grid.Column="2" x:Name="CpuText" Text="—"
+                                       Style="{StaticResource Muted}" Margin="8,0,0,0" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="RAM" Style="{StaticResource Muted}" />
+                            <Border Grid.Column="1" Height="8" CornerRadius="4" Background="{StaticResource Well}"
+                                    HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                                <Border x:Name="MemBar" HorizontalAlignment="Left" CornerRadius="4"
+                                        Background="{StaticResource Mem}" Width="0" />
+                            </Border>
+                            <TextBlock Grid.Column="2" x:Name="MemText" Text="—"
+                                       Style="{StaticResource Muted}" Margin="8,0,0,0" />
+                        </Grid>
+
+                        <ItemsControl x:Name="CulpritList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding Title}" />
+                                            <TextBlock Text="{Binding Sub}" Style="{StaticResource Muted}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="Close all" Click="OnCloseFamily"
+                                                VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- left running -->
+                <TextBlock Text="LEFT RUNNING" Style="{StaticResource SectionHead}" />
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <TextBlock x:Name="LeftoversEmpty" Style="{StaticResource Muted}"
+                                   Text="Nothing left running." TextWrapping="Wrap" />
+                        <ItemsControl x:Name="LeftoverList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Sub}" Style="{StaticResource Muted}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="{Binding Action}"
+                                                Click="OnLeftoverAction" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- recent -->
+                <TextBlock Text="RECENT" Style="{StaticResource SectionHead}" />
+                <Border Style="{StaticResource CardBorder}">
+                    <ItemsControl x:Name="HistoryList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Time}"
+                                               Style="{StaticResource Muted}" Margin="0,0,10,0" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Title}"
+                                               Foreground="{Binding Pip}" Margin="0,0,8,0" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Detail}"
+                                               Style="{StaticResource Muted}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <ScrollViewer x:Name="TabNotes" VerticalScrollBarVisibility="Auto"
+                          Padding="16,10,16,16" Visibility="Collapsed">
+                <StackPanel>
+                <!-- notes -->
+                <TextBlock Text="NOTES" Style="{StaticResource SectionHead}" />
+                <Border x:Name="NotesCard" Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <!-- One tab per list, plus the actions that manage them. -->
+                        <DockPanel Margin="0,0,0,8">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                        VerticalAlignment="Top" Margin="8,0,0,0">
+                                <Button Content="New list" Click="OnNewGroup" Margin="0,0,4,0" />
+                                <Button x:Name="BtnRenameGroup" Content="Rename" Click="OnRenameGroup"
+                                        Margin="0,0,4,0" />
+                                <Button x:Name="BtnDeleteGroup" Content="Delete list" Click="OnDeleteGroup" />
+                            </StackPanel>
+
+                            <ItemsControl x:Name="GroupTabs">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding Label}" Click="OnPickGroup"
+                                                Background="{Binding Back}"
+                                                BorderBrush="{Binding Edge}"
+                                                Margin="0,0,4,4" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </DockPanel>
+
+                        <!-- Naming a list, in place: a modal dialog for one short
+                             string is more window than the job deserves. -->
+                        <Grid x:Name="GroupEditor" Visibility="Collapsed" Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="GroupName" Grid.Column="0" Margin="0,0,6,0"
+                                     MaxLength="40"
+                                     Background="{StaticResource Well}" Foreground="{StaticResource Ink}"
+                                     CaretBrush="{StaticResource Ink}"
+                                     BorderBrush="{StaticResource Line}"
+                                     PreviewKeyDown="OnGroupNameKey" />
+                            <Button Grid.Column="1" Content="Save" Click="OnSaveGroup" Margin="0,0,4,0" />
+                            <Button Grid.Column="2" Content="Cancel" Click="OnCancelGroup" />
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="NoteEntry" Grid.Column="0" Margin="0,0,6,0"
+                                     AcceptsReturn="True" TextWrapping="Wrap"
+                                     MinHeight="26" MaxHeight="90"
+                                     VerticalScrollBarVisibility="Auto"
+                                     Background="{StaticResource Well}" Foreground="{StaticResource Ink}"
+                                     CaretBrush="{StaticResource Ink}"
+                                     BorderBrush="{StaticResource Line}"
+                                     PreviewKeyDown="OnNoteEntryKey" />
+                            <Button Grid.Column="1" Content="Add" Click="OnAddNote"
+                                    VerticalAlignment="Top" MinHeight="26" />
+                        </Grid>
+                        <TextBlock x:Name="NoteHint" Style="{StaticResource Muted}" Margin="0,4,0,0"
+                                   Text="Enter adds it · Shift+Enter for another line" />
+                        <TextBlock x:Name="HotkeyHint" Style="{StaticResource Muted}" Margin="0,2,0,0"
+                                   Text="" />
+
+                        <Grid Margin="0,12,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Find" Style="{StaticResource Muted}"
+                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBox x:Name="NoteFilter" Grid.Column="1"
+                                     Background="{StaticResource Well}" Foreground="{StaticResource Ink}"
+                                     CaretBrush="{StaticResource Ink}"
+                                     BorderBrush="{StaticResource Line}"
+                                     TextChanged="OnNoteFilterChanged" />
+                        </Grid>
+
+                        <TextBlock x:Name="NotesEmpty" Style="{StaticResource Muted}"
+                                   Text="Nothing noted yet." TextWrapping="Wrap" Margin="0,6,0,0" />
+
+                        <!-- Capped and scrolled: a long list must not push the
+                             workspace and session panels off the bottom of the
+                             window, which is what you actually opened this for. -->
+                        <ScrollViewer x:Name="NoteScroll" MaxHeight="300"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled" Margin="0,4,0,0"
+                                      PreviewMouseWheel="OnNoteScrollWheel">
+                            <ItemsControl x:Name="NoteList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource Row}" BorderBrush="{StaticResource Line}"
+                                                BorderThickness="1" CornerRadius="6"
+                                                Padding="0" Margin="0,3,2,3"
+                                                Opacity="{Binding Fade}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="4" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- The paper this note is written on, so the list and
+                                                     the desktop agree about which note is which. -->
+                                                <Border Grid.Column="0" Background="{Binding Paper}"
+                                                        CornerRadius="6,0,0,6" />
+
+                                                <CheckBox Grid.Column="1" IsChecked="{Binding Done, Mode=OneTime}"
+                                                          Click="OnNoteDone" ToolTip="Done with it"
+                                                          VerticalAlignment="Top" Margin="8,9,8,0" />
+
+                                                <StackPanel Grid.Column="2" Margin="0,6,0,6">
+                                                    <TextBox Text="{Binding Text, Mode=OneTime}"
+                                                             TextChanged="OnNoteTextChanged"
+                                                             LostFocus="OnNoteBlur"
+                                                             AcceptsReturn="True" TextWrapping="Wrap"
+                                                             BorderThickness="0" Background="Transparent"
+                                                             Padding="0" Margin="0"
+                                                             Foreground="{Binding Ink}"
+                                                             CaretBrush="{StaticResource Ink}" />
+                                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                        <TextBlock Text="{Binding When}"
+                                                                   Style="{StaticResource Muted}"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,8,0" />
+                                                        <ComboBox ItemsSource="{Binding Groups}"
+                                                                  SelectedItem="{Binding Group, Mode=OneTime}"
+                                                                  Visibility="{Binding PickerShown}"
+                                                                  SelectionChanged="OnNoteGroupChanged"
+                                                                  MinWidth="110" />
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <Button Grid.Column="3" Content="{Binding StickLabel}"
+                                                        Click="OnNoteStick" VerticalAlignment="Top"
+                                                        ToolTip="Put this note on the desktop"
+                                                        Margin="6,6,4,0" MinWidth="70" />
+                                                <Button Grid.Column="4" Content="{Binding PinLabel}"
+                                                        Click="OnNotePin" VerticalAlignment="Top"
+                                                        Margin="0,6,4,0" MinWidth="52" />
+                                                <Button Grid.Column="5" Content="Delete"
+                                                        Click="OnNoteDelete" VerticalAlignment="Top"
+                                                        Margin="0,6,8,0" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <Grid Margin="0,10,0,0">
+                            <TextBlock x:Name="NotesCount" Style="{StaticResource Muted}"
+                                       VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="BtnClearDone" Content="Clear done"
+                                        Click="OnClearDoneNotes" Margin="0,0,6,0" />
+                                <Button Content="Open notes file…" Click="OnOpenNotesFile" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <ScrollViewer x:Name="TabPorts" VerticalScrollBarVisibility="Auto"
+                          Padding="16,10,16,16" Visibility="Collapsed">
+                <StackPanel>
+                <!-- local ports -->
+                <TextBlock Text="LOCAL PORTS" Style="{StaticResource SectionHead}" />
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Find" Style="{StaticResource Muted}"
+                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBox x:Name="PortFilter" Grid.Column="1"
+                                     Background="{StaticResource Well}" Foreground="{StaticResource Ink}"
+                                     CaretBrush="{StaticResource Ink}"
+                                     BorderBrush="{StaticResource Line}"
+                                     ToolTip="A port number, or part of a process name"
+                                     TextChanged="OnPortFilterChanged" />
+                            <CheckBox x:Name="SystemPortsBox" Grid.Column="2" Content="System ports"
+                                      VerticalAlignment="Center" Margin="10,0,0,0"
+                                      ToolTip="Also show ports below 1024 — mostly Windows itself"
+                                      Click="OnPortFilterChanged" />
+                        </Grid>
+
+                        <TextBlock x:Name="PortsEmpty" Style="{StaticResource Muted}"
+                                   Text="Checking…" TextWrapping="Wrap" />
+
+                        <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="PortList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0" Text="{Binding Port}"
+                                                       Foreground="{Binding Pip}"
+                                                       FontFamily="Consolas" FontSize="13"
+                                                       VerticalAlignment="Center"
+                                                       MinWidth="52" Margin="0,0,10,0" />
+
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Sub}" Style="{StaticResource Muted}" />
+                                            </StackPanel>
+
+                                            <Button Grid.Column="3" Content="Open" Click="OnOpenPort"
+                                                    VerticalAlignment="Center" Margin="6,0,4,0"
+                                                    ToolTip="Open http://localhost:port in your browser" />
+                                            <Button Grid.Column="4" Content="Close" Click="OnClosePort"
+                                                    VerticalAlignment="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <TextBlock x:Name="PortsCount" Style="{StaticResource Muted}" Margin="0,8,0,0" />
+                    </StackPanel>
+                </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <ScrollViewer x:Name="TabSettings" VerticalScrollBarVisibility="Auto"
+                          Padding="16,10,16,16" Visibility="Collapsed">
+                <StackPanel>
+                <!-- settings -->
+                <TextBlock Text="SETTINGS" Style="{StaticResource SectionHead}" />
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Messages" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <ComboBox x:Name="MessagesBox" Width="260"
+                                      SelectionChanged="OnMessagesChanged">
+                                <ComboBoxItem Content="Show everything" />
+                                <ComboBoxItem Content="Quiet — no pop-ups, still comes to get you" />
+                                <ComboBoxItem Content="Off — badge colour only" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <CheckBox x:Name="AnnounceBox" Content="Tell me when a Claude session finishes"
+                                  Margin="0,0,0,8" Click="OnAnnounceChanged" />
+
+                        <CheckBox x:Name="StartupBox" Content="Start Coder Mascot when I log in to Windows"
+                                  Margin="0,0,0,10" Click="OnStartupChanged" />
+
+                        <UniformGrid Columns="4" Rows="2" Margin="0,0,0,10">
+                            <TextBlock Text="CPU warn %" Style="{StaticResource Muted}" Margin="0,0,6,3" />
+                            <TextBlock Text="RAM warn %" Style="{StaticResource Muted}" Margin="0,0,6,3" />
+                            <TextBlock Text="Workspace idle min" Style="{StaticResource Muted}" Margin="0,0,6,3" />
+                            <TextBlock Text="Dev server min" Style="{StaticResource Muted}" Margin="0,0,6,3" />
+                            <TextBox x:Name="CpuLimitBox" Margin="0,0,6,0" />
+                            <TextBox x:Name="MemLimitBox" Margin="0,0,6,0" />
+                            <TextBox x:Name="WsIdleBox" Margin="0,0,6,0" />
+                            <TextBox x:Name="DevIdleBox" Margin="0,0,6,0" />
+                        </UniformGrid>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Apply" Click="OnApplySettings" Margin="0,0,6,0" />
+                            <Button Content="Edit config file…" Click="OnEditConfig" />
+                            <TextBlock x:Name="SettingsNote" Style="{StaticResource Muted}"
+                                       VerticalAlignment="Center" Margin="10,0,0,0" Text="" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>
