@@ -12,104 +12,31 @@
         UseLayoutRounding="True">
 
     <Window.Resources>
-        <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="13" />
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/UI/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
 
-        <Style x:Key="Muted" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Faint}" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-        </Style>
-
-        <Style x:Key="Step" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="FontWeight" Value="SemiBold" />
+        <Style x:Key="Step" TargetType="TextBlock" BasedOn="{StaticResource Title}">
+            <Setter Property="FontSize" Value="{StaticResource TextBody}" />
             <Setter Property="Margin" Value="0,16,0,4" />
         </Style>
-
-        <Style TargetType="TextBox">
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="Padding" Value="6,5" />
-            <Setter Property="Background" Value="{StaticResource Well}" />
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="CaretBrush" Value="{StaticResource Ink}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-        </Style>
-
-        <Style TargetType="PasswordBox">
-            <Setter Property="FontFamily" Value="Consolas" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="Padding" Value="6,5" />
-            <Setter Property="Background" Value="{StaticResource Well}" />
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="CaretBrush" Value="{StaticResource Ink}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-        </Style>
-
-        <Style TargetType="ComboBox">
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="13" />
-        </Style>
-
-        <Style TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="Background" Value="{StaticResource Line}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Edge}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="12,6" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Chrome" CornerRadius="5"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}">
-                            <ContentPresenter Margin="{TemplateBinding Padding}"
-                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Edge}" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Background" Value="{StaticResource Pick}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Pick}" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-        </Style>
+        </ResourceDictionary>
     </Window.Resources>
 
     <StackPanel Margin="22,18,22,18">
-        <TextBlock Text="Point the mascot at your workspace" FontSize="16" FontWeight="SemiBold" />
-        <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
+        <TextBlock Text="Point the mascot at your workspace" Style="{StaticResource Title}" />
+        <TextBlock Style="{StaticResource Prose}" Margin="0,4,0,0"
                    Text="Two things: where Coder lives, and a session token so it can ask about your workspace. Nothing is saved until it has been checked." />
 
         <TextBlock Text="1 · Your Coder address" Style="{StaticResource Step}" />
         <TextBox x:Name="UrlBox" TextChanged="OnUrlChanged" />
-        <TextBlock x:Name="UrlNote" Style="{StaticResource Muted}" Margin="0,4,0,0" />
+        <TextBlock x:Name="UrlNote" Style="{StaticResource Prose}" Margin="0,4,0,0" />
 
         <TextBlock Text="2 · Get a session token" Style="{StaticResource Step}" />
         <StackPanel Orientation="Horizontal">
             <Button x:Name="BtnOpen" Content="Open the token page" Click="OnOpenTokenPage" />
-            <TextBlock x:Name="OpenNote" Style="{StaticResource Muted}" VerticalAlignment="Center"
+            <TextBlock x:Name="OpenNote" Style="{StaticResource Prose}" VerticalAlignment="Center"
                        Margin="10,0,0,0" Text="Opens in your browser. Sign in, then copy the token." />
         </StackPanel>
 
@@ -128,12 +55,12 @@
         </Border>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-            <Button x:Name="BtnLater" Content="Not now" Click="OnLater" Margin="0,0,8,0" />
+            <Button x:Name="BtnLater" Content="Not now" Click="OnLater" Margin="{StaticResource GapAfter}" />
             <Button x:Name="BtnConnect" Content="Connect" Style="{StaticResource Primary}"
                     Click="OnConnect" IsDefault="True" />
         </StackPanel>
 
-        <TextBlock Style="{StaticResource Muted}" Margin="0,12,0,0"
+        <TextBlock Style="{StaticResource Prose}" Margin="0,12,0,0"
                    Text="Already use the Coder CLI? Run `coder login` and the mascot picks that up on its own — nothing to fill in here." />
     </StackPanel>
 </Window>

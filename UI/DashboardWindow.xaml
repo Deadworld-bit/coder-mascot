@@ -11,85 +11,11 @@
         UseLayoutRounding="True">
 
     <Window.Resources>
-        <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
-        </Style>
-
-        <Style x:Key="Muted" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Faint}" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-        </Style>
-
-        <Style x:Key="SectionHead" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Faint}" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,16,0,8" />
-        </Style>
-
-        <Style TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="Background" Value="{StaticResource Line}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Edge}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="9,4" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Chrome" CornerRadius="5"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}">
-                            <ContentPresenter Margin="{TemplateBinding Padding}"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Edge}" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="CheckBox">
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-        </Style>
-
-        <Style TargetType="ComboBox">
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-        </Style>
-
-        <Style TargetType="TextBox">
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Padding" Value="4,3" />
-        </Style>
-
-        <!-- One card per section. -->
-        <Style x:Key="CardBorder" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource Card}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="14,12" />
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/UI/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </Window.Resources>
 
     <DockPanel>
@@ -113,7 +39,7 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="Check now" Click="OnCheckNow" Margin="0,0,6,0" />
+                    <Button Content="Check now" Click="OnCheckNow" Margin="{StaticResource GapButton}" />
                     <Button Content="Open Coder" Click="OnOpenCoder" />
                 </StackPanel>
             </Grid>
@@ -144,7 +70,7 @@
                                                FontWeight="{Binding Weight}"
                                                Foreground="{Binding Ink}" />
                                     <Border Background="{Binding BadgeBack}" CornerRadius="8"
-                                            Padding="6,1" Margin="8,0,0,0"
+                                            Padding="6,1" Margin="{StaticResource GapBefore}"
                                             VerticalAlignment="Center"
                                             Visibility="{Binding BadgeShown}">
                                         <TextBlock Text="{Binding Badge}" FontSize="11"
@@ -168,16 +94,16 @@
                           Padding="16,10,16,16" Visibility="Collapsed">
                 <StackPanel>
                 <!-- workspace -->
-                <TextBlock Text="WORKSPACE" Style="{StaticResource SectionHead}" />
+                <TextBlock Text="WORKSPACE" Style="{StaticResource SectionTop}" />
                 <Border Style="{StaticResource CardBorder}">
                     <StackPanel>
                         <TextBlock x:Name="WorkspaceFacts" Style="{StaticResource Muted}"
                                    TextWrapping="Wrap" Text="—" />
                         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                            <Button x:Name="BtnStart" Content="Start" Click="OnStartWorkspace" Margin="0,0,6,0" />
-                            <Button x:Name="BtnStop" Content="Stop" Click="OnStopWorkspace" Margin="0,0,6,0" />
-                            <Button x:Name="BtnRestart" Content="Restart" Click="OnRestartWorkspace" Margin="0,0,6,0" />
-                            <Button x:Name="BtnLogin" Content="coder login" Click="OnCoderLogin" Margin="0,0,6,0" />
+                            <Button x:Name="BtnStart" Content="Start" Click="OnStartWorkspace" Margin="{StaticResource GapButton}" />
+                            <Button x:Name="BtnStop" Content="Stop" Click="OnStopWorkspace" Margin="{StaticResource GapButton}" />
+                            <Button x:Name="BtnRestart" Content="Restart" Click="OnRestartWorkspace" Margin="{StaticResource GapButton}" />
+                            <Button x:Name="BtnLogin" Content="coder login" Click="OnCoderLogin" Margin="{StaticResource GapButton}" />
                             <Button Content="Connect…" Click="OnShowSetup"
                                     ToolTip="Set the Coder address and session token from here" />
                         </StackPanel>
@@ -185,7 +111,7 @@
                 </Border>
 
                 <!-- Claude sessions -->
-                <TextBlock Text="CLAUDE SESSIONS" Style="{StaticResource SectionHead}" />
+                <TextBlock Text="CLAUDE SESSIONS" Style="{StaticResource SectionTop}" />
                 <Border Style="{StaticResource CardBorder}">
                     <StackPanel>
                         <TextBlock x:Name="SessionsEmpty" Style="{StaticResource Muted}"
@@ -201,7 +127,7 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
-                                        <Ellipse Grid.Column="0" Width="9" Height="9" Margin="0,0,8,0"
+                                        <Ellipse Grid.Column="0" Width="9" Height="9" Margin="{StaticResource GapAfter}"
                                                  VerticalAlignment="Center" Fill="{Binding Pip}" />
 
                                         <StackPanel Grid.Column="1">
@@ -224,7 +150,7 @@
                 </Border>
 
                 <!-- this machine -->
-                <TextBlock Text="THIS MACHINE" Style="{StaticResource SectionHead}" />
+                <TextBlock Text="THIS MACHINE" Style="{StaticResource SectionTop}" />
                 <Border Style="{StaticResource CardBorder}">
                     <StackPanel>
                         <Grid Margin="0,0,0,4">
@@ -240,10 +166,10 @@
                                         Background="{StaticResource Cpu}" Width="0" />
                             </Border>
                             <TextBlock Grid.Column="2" x:Name="CpuText" Text="—"
-                                       Style="{StaticResource Muted}" Margin="8,0,0,0" />
+                                       Style="{StaticResource Muted}" Margin="{StaticResource GapBefore}" />
                         </Grid>
 
-                        <Grid Margin="0,0,0,8">
+                        <Grid Margin="{StaticResource GapBelow}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="44" />
                                 <ColumnDefinition Width="*" />
@@ -256,7 +182,7 @@
                                         Background="{StaticResource Mem}" Width="0" />
                             </Border>
                             <TextBlock Grid.Column="2" x:Name="MemText" Text="—"
-                                       Style="{StaticResource Muted}" Margin="8,0,0,0" />
+                                       Style="{StaticResource Muted}" Margin="{StaticResource GapBefore}" />
                         </Grid>
 
                         <ItemsControl x:Name="CulpritList">
@@ -281,7 +207,7 @@
                 </Border>
 
                 <!-- left running -->
-                <TextBlock Text="LEFT RUNNING" Style="{StaticResource SectionHead}" />
+                <TextBlock Text="LEFT RUNNING" Style="{StaticResource SectionTop}" />
                 <Border Style="{StaticResource CardBorder}">
                     <StackPanel>
                         <TextBlock x:Name="LeftoversEmpty" Style="{StaticResource Muted}"
@@ -308,7 +234,7 @@
                 </Border>
 
                 <!-- recent -->
-                <TextBlock Text="RECENT" Style="{StaticResource SectionHead}" />
+                <TextBlock Text="RECENT" Style="{StaticResource SectionTop}" />
                 <Border Style="{StaticResource CardBorder}">
                     <ItemsControl x:Name="HistoryList">
                         <ItemsControl.ItemTemplate>
@@ -322,7 +248,7 @@
                                     <TextBlock Grid.Column="0" Text="{Binding Time}"
                                                Style="{StaticResource Muted}" Margin="0,0,10,0" />
                                     <TextBlock Grid.Column="1" Text="{Binding Title}"
-                                               Foreground="{Binding Pip}" Margin="0,0,8,0" />
+                                               Foreground="{Binding Pip}" Margin="{StaticResource GapAfter}" />
                                     <TextBlock Grid.Column="2" Text="{Binding Detail}"
                                                Style="{StaticResource Muted}"
                                                TextTrimming="CharacterEllipsis" />
@@ -338,13 +264,13 @@
                           Padding="16,10,16,16" Visibility="Collapsed">
                 <StackPanel>
                 <!-- notes -->
-                <TextBlock Text="NOTES" Style="{StaticResource SectionHead}" />
+                <TextBlock Text="NOTES" Style="{StaticResource SectionTop}" />
                 <Border x:Name="NotesCard" Style="{StaticResource CardBorder}">
                     <StackPanel>
                         <!-- One tab per list, plus the actions that manage them. -->
-                        <DockPanel Margin="0,0,0,8">
+                        <DockPanel Margin="{StaticResource GapBelow}">
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
-                                        VerticalAlignment="Top" Margin="8,0,0,0">
+                                        VerticalAlignment="Top" Margin="{StaticResource GapBefore}">
                                 <Button Content="New list" Click="OnNewGroup" Margin="0,0,4,0" />
                                 <Button x:Name="BtnRenameGroup" Content="Rename" Click="OnRenameGroup"
                                         Margin="0,0,4,0" />
@@ -370,13 +296,13 @@
 
                         <!-- Naming a list, in place: a modal dialog for one short
                              string is more window than the job deserves. -->
-                        <Grid x:Name="GroupEditor" Visibility="Collapsed" Margin="0,0,0,8">
+                        <Grid x:Name="GroupEditor" Visibility="Collapsed" Margin="{StaticResource GapBelow}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="GroupName" Grid.Column="0" Margin="0,0,6,0"
+                            <TextBox x:Name="GroupName" Grid.Column="0" Margin="{StaticResource GapButton}"
                                      MaxLength="40"
                                      Background="{StaticResource Well}" Foreground="{StaticResource Ink}"
                                      CaretBrush="{StaticResource Ink}"
@@ -391,7 +317,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="NoteEntry" Grid.Column="0" Margin="0,0,6,0"
+                            <TextBox x:Name="NoteEntry" Grid.Column="0" Margin="{StaticResource GapButton}"
                                      AcceptsReturn="True" TextWrapping="Wrap"
                                      MinHeight="26" MaxHeight="90"
                                      VerticalScrollBarVisibility="Auto"
@@ -413,7 +339,7 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Find" Style="{StaticResource Muted}"
-                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                                       VerticalAlignment="Center" Margin="{StaticResource GapAfter}" />
                             <TextBox x:Name="NoteFilter" Grid.Column="1"
                                      Background="{StaticResource Well}" Foreground="{StaticResource Ink}"
                                      CaretBrush="{StaticResource Ink}"
@@ -458,7 +384,7 @@
                                                           VerticalAlignment="Top" Margin="8,9,8,0" />
 
                                                 <StackPanel Grid.Column="2" Margin="0,6,0,6">
-                                                    <TextBox Text="{Binding Text, Mode=OneTime}"
+                                                    <TextBox Text="{Binding Text, Mode=OneTime}" Style="{StaticResource Inline}"
                                                              TextChanged="OnNoteTextChanged"
                                                              LostFocus="OnNoteBlur"
                                                              AcceptsReturn="True" TextWrapping="Wrap"
@@ -470,7 +396,7 @@
                                                         <TextBlock Text="{Binding When}"
                                                                    Style="{StaticResource Muted}"
                                                                    VerticalAlignment="Center"
-                                                                   Margin="0,0,8,0" />
+                                                                   Margin="{StaticResource GapAfter}" />
                                                         <ComboBox ItemsSource="{Binding Groups}"
                                                                   SelectedItem="{Binding Group, Mode=OneTime}"
                                                                   Visibility="{Binding PickerShown}"
@@ -501,7 +427,7 @@
                                        VerticalAlignment="Center" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button x:Name="BtnClearDone" Content="Clear done"
-                                        Click="OnClearDoneNotes" Margin="0,0,6,0" />
+                                        Click="OnClearDoneNotes" Margin="{StaticResource GapButton}" />
                                 <Button Content="Open notes file…" Click="OnOpenNotesFile" />
                             </StackPanel>
                         </Grid>
@@ -514,7 +440,7 @@
                           Padding="16,10,16,16" Visibility="Collapsed">
                 <StackPanel>
                 <!-- local ports -->
-                <TextBlock Text="LOCAL PORTS" Style="{StaticResource SectionHead}" />
+                <TextBlock Text="LOCAL PORTS" Style="{StaticResource SectionTop}" />
                 <Border Style="{StaticResource CardBorder}">
                     <StackPanel>
                         <Grid Margin="0,0,0,6">
@@ -524,7 +450,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Find" Style="{StaticResource Muted}"
-                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                                       VerticalAlignment="Center" Margin="{StaticResource GapAfter}" />
                             <TextBox x:Name="PortFilter" Grid.Column="1"
                                      Background="{StaticResource Well}" Foreground="{StaticResource Ink}"
                                      CaretBrush="{StaticResource Ink}"
@@ -586,40 +512,93 @@
             <ScrollViewer x:Name="TabSettings" VerticalScrollBarVisibility="Auto"
                           Padding="16,10,16,16" Visibility="Collapsed">
                 <StackPanel>
-                <!-- settings -->
-                <TextBlock Text="SETTINGS" Style="{StaticResource SectionHead}" />
+                <!-- Three concerns, three headings. They were one card with
+                     twelve controls in it, which is how a settings screen ends
+                     up read as a control panel: nothing tells you which knob
+                     belongs to which question. -->
+
+                <TextBlock Text="HOW MUCH IT INTERRUPTS" Style="{StaticResource SectionTop}" />
                 <Border Style="{StaticResource CardBorder}">
                     <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Messages" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <!-- Order matters: the code-behind reads
+                                 SelectedIndex, so 0/1/2 are all/quiet/off. -->
                             <ComboBox x:Name="MessagesBox" Width="260"
                                       SelectionChanged="OnMessagesChanged">
                                 <ComboBoxItem Content="Show everything" />
-                                <ComboBoxItem Content="Quiet — no pop-ups, still comes to get you" />
-                                <ComboBoxItem Content="Off — badge colour only" />
+                                <ComboBoxItem Content="Quiet \u2014 no pop-ups, still comes to get you" />
+                                <ComboBoxItem Content="Off \u2014 badge colour only" />
                             </ComboBox>
                         </StackPanel>
-
                         <CheckBox x:Name="AnnounceBox" Content="Tell me when a Claude session finishes"
-                                  Margin="0,0,0,8" Click="OnAnnounceChanged" />
+                                  Margin="0,10,0,0" Click="OnAnnounceChanged" />
+                    </StackPanel>
+                </Border>
 
-                        <CheckBox x:Name="StartupBox" Content="Start Coder Mascot when I log in to Windows"
-                                  Margin="0,0,0,10" Click="OnStartupChanged" />
+                <TextBlock Text="STARTUP" Style="{StaticResource SectionTop}" />
+                <Border Style="{StaticResource CardBorder}">
+                    <CheckBox x:Name="StartupBox" Content="Start Coder Mascot when I log in to Windows"
+                              Click="OnStartupChanged" />
+                </Border>
 
-                        <UniformGrid Columns="4" Rows="2" Margin="0,0,0,10">
-                            <TextBlock Text="CPU warn %" Style="{StaticResource Muted}" Margin="0,0,6,3" />
-                            <TextBlock Text="RAM warn %" Style="{StaticResource Muted}" Margin="0,0,6,3" />
-                            <TextBlock Text="Workspace idle min" Style="{StaticResource Muted}" Margin="0,0,6,3" />
-                            <TextBlock Text="Dev server min" Style="{StaticResource Muted}" Margin="0,0,6,3" />
-                            <TextBox x:Name="CpuLimitBox" Margin="0,0,6,0" />
-                            <TextBox x:Name="MemLimitBox" Margin="0,0,6,0" />
-                            <TextBox x:Name="WsIdleBox" Margin="0,0,6,0" />
-                            <TextBox x:Name="DevIdleBox" Margin="0,0,6,0" />
-                        </UniformGrid>
+                <TextBlock Text="WHEN TO WARN ME" Style="{StaticResource SectionTop}" />
+                <Border Style="{StaticResource CardBorder}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Prose}" Margin="0,0,0,10"
+                                   Text="Most people never change these. Each one says what it accepts, because a value outside the range is quietly clamped rather than refused." />
 
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="Apply" Click="OnApplySettings" Margin="0,0,6,0" />
-                            <Button Content="Edit config file…" Click="OnEditConfig" />
+                        <!-- One row per setting, label and field on the same
+                             line as the range they accept. This was a
+                             UniformGrid four columns wide with the labels in one
+                             row and the fields in the next, so which label
+                             belonged to which box was a matter of counting. -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="70" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="CPU busy above"
+                                       VerticalAlignment="Center" Margin="0,0,10,6" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="CpuLimitBox" Margin="0,0,10,6" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Muted}"
+                                       VerticalAlignment="Center" Margin="0,0,0,6"
+                                       Text="per cent \u00b7 40 to 99" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="RAM busy above"
+                                       VerticalAlignment="Center" Margin="0,0,10,6" />
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="MemLimitBox" Margin="0,0,10,6" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Muted}"
+                                       VerticalAlignment="Center" Margin="0,0,0,6"
+                                       Text="per cent \u00b7 40 to 99" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Workspace idle for"
+                                       VerticalAlignment="Center" Margin="0,0,10,6" />
+                            <TextBox Grid.Row="2" Grid.Column="1" x:Name="WsIdleBox" Margin="0,0,10,6" />
+                            <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Muted}"
+                                       VerticalAlignment="Center" Margin="0,0,0,6"
+                                       Text="minutes \u00b7 5 to 10080, or 0 to never ask" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Dev server idle for"
+                                       VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <TextBox Grid.Row="3" Grid.Column="1" x:Name="DevIdleBox" Margin="0,0,10,0" />
+                            <TextBlock Grid.Row="3" Grid.Column="2" Style="{StaticResource Muted}"
+                                       VerticalAlignment="Center"
+                                       Text="minutes \u00b7 5 to 10080, or 0 to never ask" />
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Button Content="Apply" Style="{StaticResource Primary}"
+                                    Click="OnApplySettings" Margin="{StaticResource GapButton}" />
+                            <Button Content="Edit config file\u2026" Click="OnEditConfig" />
                             <TextBlock x:Name="SettingsNote" Style="{StaticResource Muted}"
                                        VerticalAlignment="Center" Margin="10,0,0,0" Text="" />
                         </StackPanel>

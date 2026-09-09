@@ -1239,7 +1239,8 @@ screen. Frames pause entirely while the mascot is hidden, which matters because
 ## Colour and spacing
 
 Every colour the windows use lives in [`UI/Theme.xaml`](UI/Theme.xaml) (for markup)
-and [`UI/Tone.cs`](UI/Tone.cs) (for code), and the two hold the same palette.
+and [`UI/Tone.cs`](UI/Tone.cs) (for code), and the two hold the same palette. Every
+control *style* lives in [`UI/Controls.xaml`](UI/Controls.xaml).
 
 They exist because the alternative had grown to **fifty-two hexes**, and the count
 was the diagnosis. Three windows each declared their own `Ink`, `Card`, `Line`
@@ -1268,10 +1269,31 @@ Three bugs fell out of writing it down, which is the argument for having done it
 | the mascot's ring and the dashboard's pip read the same state from **two hand-maintained tables** | one `Tone.For(state)`, so they cannot drift again |
 
 Spacing and type are on scales too — 4/6/8/10/12/16 for space, `11 / 12 / 13 / 15`
-for type. The type scale matters more than it sounds: the old sizes included
-`11.5` and `12.5`, and with `TextFormattingMode="Display"` a half-pixel face
-rounds unpredictably from one line to the next, which is a real and quite
-mysterious source of text looking uneven.
+for type, and nothing else. The type scale matters more than it sounds: the old
+sizes included `10.5`, `11.5` and `12.5`, and with `TextFormattingMode="Display"`
+a half-pixel face rounds unpredictably from one line to the next, which is a real
+and quite mysterious source of text looking uneven.
+
+The styles were the same story as the colours, one level up. Each of the four
+chrome windows declared its own `Muted`, `SectionHead`, `Primary`, `CardBorder`
+and implicit control styles — and four copies drift:
+
+| | |
+|---|---|
+| `SectionHead` had **three different margins** in three windows | one style, no margin; `SectionTop` adds it for stacked forms |
+| the **primary** button was `14×7` at 13px in one window and `10×5` at 12px in another | one `Primary` |
+| `TextBox` had **four different paddings** and two font sizes | one style, plus `Inline` for the one that sits in a list row |
+| `Slight` and `Quiet` were **byte-identical under two names** | `Quiet` |
+
+`Controls.xaml` is merged per-window rather than into `App.xaml`, deliberately:
+its implicit styles would otherwise repaint the sticky note — yellow paper with a
+text area on it — and the speech bubble, which are desktop objects with their own
+look rather than app chrome.
+
+Spacing resources are `Thickness`, not a scale of `Double`s, because XAML cannot
+compose a `Thickness` out of `Double`s — a `Space2` would be a number nothing
+could actually be spaced by. Only values repeated enough to be worth one
+definition are named; `Margin="0,0,6,0"` alone appeared 22 times.
 
 ## Tests
 

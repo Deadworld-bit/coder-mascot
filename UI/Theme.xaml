@@ -37,6 +37,7 @@
 
     <!-- selection and keyboard focus, and nothing else -->
     <SolidColorBrush x:Key="Pick" Color="#3B82F6" />
+    <SolidColorBrush x:Key="PickFill" Color="#2563EB" />
 
     <!-- meanings -->
     <SolidColorBrush x:Key="Deploy"     Color="#818CF8" />

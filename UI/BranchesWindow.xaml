@@ -12,126 +12,26 @@
         UseLayoutRounding="True">
 
     <Window.Resources>
-        <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/UI/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
 
-        <Style x:Key="Muted" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Faint}" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-        </Style>
-
-        <!-- Counts and times line up in columns, so they get tabular figures. -->
-        <Style x:Key="Figure" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Faint}" />
-            <Setter Property="FontFamily" Value="Consolas" />
-            <Setter Property="FontSize" Value="12" />
-        </Style>
-
-        <Style x:Key="SectionHead" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Faint}" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-        </Style>
-
-        <Style TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="Background" Value="{StaticResource Line}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Edge}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="10,5" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Chrome" CornerRadius="5"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}">
-                            <ContentPresenter Margin="{TemplateBinding Padding}"
-                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Edge}" />
-                            </Trigger>
-                            <!-- Keyboard users need to see where they are, and the
-                                 default WPF dotted rectangle is invisible on this
-                                 background. -->
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Pick}" />
-                                <Setter TargetName="Chrome" Property="BorderThickness" Value="2" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Background" Value="{StaticResource Pick}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Pick}" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Padding" Value="14,7" />
-            <Setter Property="FontSize" Value="13" />
-        </Style>
-
-        <Style x:Key="Quiet" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Background" Value="{StaticResource Card}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-            <Setter Property="Foreground" Value="{StaticResource Faint}" />
-            <Setter Property="Padding" Value="9,4" />
-            <Setter Property="FontSize" Value="11" />
-        </Style>
-
-        <Style TargetType="TextBox">
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Padding" Value="7,5" />
-            <Setter Property="Background" Value="{StaticResource Well}" />
-            <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="CaretBrush" Value="{StaticResource Ink}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-
-        <Style TargetType="ComboBox">
-            <Setter Property="FontFamily" Value="Segoe UI" />
-            <Setter Property="FontSize" Value="12" />
-        </Style>
-
-        <Style x:Key="CardBorder" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource Card}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="14,12" />
-        </Style>
-
-        <!-- A count you can press. The number tells you how much there is; the
-             press is what most people wanted to do with it anyway. -->
-        <DataTemplate x:Key="ChipTemplate">
+            <!-- A count you can press. The number says how much there is; the
+                 press is what most people wanted to do with it anyway. -->
+            <DataTemplate x:Key="ChipTemplate">
             <Button Click="OnPickChip" Cursor="Hand" Margin="0,0,8,8"
                     Background="{Binding Back}" BorderBrush="{Binding Edge}"
                     BorderThickness="1" Padding="10,4" ToolTip="{Binding Tip}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding Count}" FontFamily="Consolas" FontSize="12"
                                FontWeight="SemiBold" Foreground="{Binding Ink}"
-                               Margin="0,0,6,0" />
-                    <TextBlock Text="{Binding Text}" FontSize="11.5" Foreground="{Binding Ink}" />
+                               Margin="{StaticResource GapButton}" />
+                    <TextBlock Text="{Binding Text}" FontSize="11" Foreground="{Binding Ink}" />
                 </StackPanel>
             </Button>
-        </DataTemplate>
+            </DataTemplate>
+        </ResourceDictionary>
     </Window.Resources>
 
     <DockPanel>
@@ -153,9 +53,9 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock x:Name="BusyNote" Style="{StaticResource Muted}"
                                VerticalAlignment="Center" Margin="0,0,10,0" />
-                    <Button x:Name="BtnEdit" Content="Edit…" Click="OnEditProject" Margin="0,0,6,0"
+                    <Button x:Name="BtnEdit" Content="Edit…" Click="OnEditProject" Margin="{StaticResource GapButton}"
                             ToolTip="Change this repository's folder, name or deploy branches" />
-                    <Button x:Name="BtnRead" Content="Re-read" Click="OnReRead" Margin="0,0,6,0"
+                    <Button x:Name="BtnRead" Content="Re-read" Click="OnReRead" Margin="{StaticResource GapButton}"
                             ToolTip="Read the repository again, without touching the network  (F5)" />
                     <Button x:Name="BtnFetch" Content="Fetch from origin" Click="OnFetch"
                             ToolTip="git fetch --all --prune, then re-read. For a repository added by URL, this is also what downloads it the first time." />
@@ -238,7 +138,7 @@
                                             <TextBlock Grid.Column="3" Text="{Binding Count}"
                                                        Style="{StaticResource Figure}"
                                                        Visibility="{Binding CountShown}"
-                                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                       VerticalAlignment="Center" Margin="{StaticResource GapAfter}" />
 
                                             <!-- Kept on the heading whether it is open or
                                                  shut. Folding a group away must not fold
@@ -304,7 +204,7 @@
                     <Border x:Name="EmptyCard" Style="{StaticResource CardBorder}" Padding="22,20"
                             Visibility="Collapsed" Margin="0,0,0,14">
                         <StackPanel>
-                            <TextBlock Text="Nothing is being watched yet" FontSize="14"
+                            <TextBlock Text="Nothing is being watched yet" Style="{StaticResource Title}"
                                        FontWeight="SemiBold" />
                             <TextBlock Style="{StaticResource Muted}" TextWrapping="Wrap"
                                        MaxWidth="620" HorizontalAlignment="Left" Margin="0,8,0,0"
@@ -362,7 +262,7 @@
                                                 <TextBlock Text="{Binding Environment}" FontWeight="SemiBold" />
                                                 <TextBlock Text="{Binding Branch}"
                                                            Style="{StaticResource Figure}"
-                                                           Margin="8,0,0,0" VerticalAlignment="Center"
+                                                           Margin="{StaticResource GapBefore}" VerticalAlignment="Center"
                                                            TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                             <TextBlock Text="{Binding Last}" Style="{StaticResource Muted}"
@@ -392,13 +292,13 @@
                         <!-- Pinned. Scrolling forty branches must not take the box
                              that filters them off the screen. -->
                         <StackPanel DockPanel.Dock="Top" Margin="0,0,12,8">
-                            <Grid Margin="0,0,0,8">
+                            <Grid Margin="{StaticResource GapBelow}">
                                 <TextBlock Text="BRANCHES" Style="{StaticResource SectionHead}"
                                            VerticalAlignment="Center" />
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
                                             VerticalAlignment="Center">
                                     <TextBlock Text="sort" Style="{StaticResource Muted}"
-                                               VerticalAlignment="Center" Margin="0,0,6,0" />
+                                               VerticalAlignment="Center" Margin="{StaticResource GapButton}" />
                                     <ComboBox x:Name="SortBox" Width="150"
                                               SelectionChanged="OnSortChanged">
                                         <ComboBoxItem Content="Recently touched" />
@@ -406,7 +306,7 @@
                                         <ComboBoxItem Content="Furthest behind" />
                                         <ComboBoxItem Content="Author" />
                                     </ComboBox>
-                                    <TextBox x:Name="BranchFilter" Width="200" Margin="8,0,0,0"
+                                    <TextBox x:Name="BranchFilter" Width="200" Margin="{StaticResource GapBefore}"
                                              TextChanged="OnFilterChanged"
                                              ToolTip="Filter by branch name, author, or commit subject  (Ctrl+F, Esc clears)" />
                                 </StackPanel>
@@ -441,13 +341,13 @@
                                                 <StackPanel Orientation="Horizontal">
                                                     <Border Background="{Binding Accent}" Width="7" Height="7"
                                                             CornerRadius="3.5" VerticalAlignment="Center"
-                                                            Margin="0,0,8,0" />
+                                                            Margin="{StaticResource GapAfter}" />
                                                     <TextBlock Text="{Binding Title}"
                                                                Style="{StaticResource SectionHead}"
                                                                VerticalAlignment="Center" />
                                                     <TextBlock Text="{Binding Count}"
                                                                Style="{StaticResource Figure}"
-                                                               FontSize="11" Margin="8,0,0,0"
+                                                               FontSize="11" Margin="{StaticResource GapBefore}"
                                                                VerticalAlignment="Center" />
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}"
@@ -512,7 +412,7 @@
                                                                ToolTip="{Binding CountsTip}" />
 
                                                     <ItemsControl Grid.Column="3" ItemsSource="{Binding Pills}"
-                                                                  VerticalAlignment="Center" Margin="0,0,6,0">
+                                                                  VerticalAlignment="Center" Margin="{StaticResource GapButton}">
                                                         <ItemsControl.ItemsPanel>
                                                             <ItemsPanelTemplate>
                                                                 <StackPanel Orientation="Horizontal" />
@@ -521,7 +421,7 @@
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate>
                                                                 <Border Background="{Binding Back}" CornerRadius="10"
-                                                                        Padding="9,3" Margin="0,0,6,0"
+                                                                        Padding="9,3" Margin="{StaticResource GapButton}"
                                                                         ToolTip="{Binding Tip}">
                                                                     <TextBlock Text="{Binding Text}" FontSize="11"
                                                                                Foreground="{Binding Ink}" />
@@ -552,7 +452,7 @@
                             BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
                         <DockPanel Margin="16,0,0,0">
                             <StackPanel DockPanel.Dock="Top" Margin="0,0,16,8">
-                                <Grid Margin="0,0,0,8">
+                                <Grid Margin="{StaticResource GapBelow}">
                                     <TextBlock Text="WHAT LANDED, AND WHEN"
                                                Style="{StaticResource SectionHead}"
                                                VerticalAlignment="Center" />
@@ -567,7 +467,7 @@
                                         <TextBlock x:Name="TraceNote" FontSize="11" Foreground="{StaticResource PartlyInk}" />
                                     </Border>
                                     <Button x:Name="BtnClearTrace" Content="Show all" Click="OnClearTrace"
-                                            Style="{StaticResource Quiet}" Margin="8,0,0,0" />
+                                            Style="{StaticResource Quiet}" Margin="{StaticResource GapBefore}" />
                                 </StackPanel>
                             </StackPanel>
 

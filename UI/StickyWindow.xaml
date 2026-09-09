@@ -79,7 +79,7 @@
                     <!-- The list this note is filed under, so a wall of them on the
                          desktop still says which is which. -->
                     <TextBlock x:Name="GroupLabel" Grid.Column="1" VerticalAlignment="Center"
-                               Margin="6,0" FontFamily="Segoe UI" FontSize="10.5"
+                               Margin="6,0" FontFamily="Segoe UI" FontSize="11"
                                Opacity="0.75" TextTrimming="CharacterEllipsis"
                                IsHitTestVisible="False" />
 

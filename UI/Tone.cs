@@ -74,6 +74,12 @@ public static class Tone
     /// </summary>
     public const string Pick = "#3B82F6";
 
+    /// <summary>
+    /// A primary button's fill: one step under the accent, so its border still
+    /// reads as an edge instead of vanishing into the fill.
+    /// </summary>
+    public const string PickFill = "#2563EB";
+
     /// <summary>A chip or row that is currently the chosen filter.</summary>
     public const string PickTint = "#1D3A66";
 

@@ -22,11 +22,11 @@
             BorderBrush="#4DFFFFFF" BorderThickness="1">
         <StackPanel>
             <TextBlock x:Name="BubbleTitle"
-                       FontFamily="Segoe UI" FontSize="12.5" FontWeight="SemiBold"
+                       FontFamily="Segoe UI" FontSize="13" FontWeight="SemiBold"
                        Foreground="#FFFFFF" TextWrapping="Wrap" />
             <TextBlock x:Name="BubbleBody"
                        Margin="0,3,0,0"
-                       FontFamily="Segoe UI" FontSize="11.5"
+                       FontFamily="Segoe UI" FontSize="12"
                        Foreground="#CBD5E1" TextWrapping="Wrap" />
         </StackPanel>
     </Border>
