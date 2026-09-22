@@ -891,6 +891,28 @@ Environment.SetEnvironmentVariable("CODER_SESSION_TOKEN", null);
         [new RawListener(3000, 100, true, false), new RawListener(3000, 300, false, true)], Named);
     Check("the same port held by two processes is two facts", shared.Count == 2);
 
+    // Describing a process means opening a handle to it and reading its start
+    // time. One dev server holds three or four ports, so asking per port rather
+    // than per process does that work three times over, on a sweep that runs the
+    // whole time the dashboard is open. The pid that answers null is the one
+    // worth pinning: not remembering a "no" asks again for every port it holds.
+    var asked = new List<int>();
+    (string Name, TimeSpan Uptime)? Counted(int pid) { asked.Add(pid); return Named(pid); }
+
+    LocalPorts.Combine(
+    [
+        new RawListener(5173, 100, true, false),
+        new RawListener(5174, 100, true, false),
+        new RawListener(9229, 100, true, false),
+        new RawListener(7001, 999, true, false),
+        new RawListener(7002, 999, true, false),
+    ], Counted);
+
+    Check("a process is described once however many ports it holds",
+        asked.Count == 2);
+    Check("including one that could not be described at all",
+        asked.Count(p => p == 999) == 1);
+
     Check("system ports are hidden by default",
         LocalPorts.Visible(all, null, includeSystem: false).All(l => l.Port >= 1024));
     Check("and shown when asked for",
@@ -2712,5 +2734,721 @@ else
 }
 
 Reset();
+// --- What an empty note list says ------------------------------------------
+
+{
+    Check("nothing ever written",
+          NoteBook.Nothing(0, "", null).StartsWith("Nothing noted yet"));
+    Check("nothing in this list", NoteBook.Nothing(0, "", "Work") == "Nothing in Work yet.");
+
+    // The one worth having: forty notes behind a filter is not "nothing yet".
+    Check("notes exist but none match", NoteBook.Nothing(40, "port", null).Contains("port"));
+    Check("  ...and that beats the list name", NoteBook.Nothing(40, "port", "Work").Contains("port"));
+}
+
+// --- What the workspace panel offers ---------------------------------------
+//
+// The rule that keeps the app from looking broken: Coder answers "start" on a
+// running workspace with an error, so the button must not be there to press.
+
+{
+    var now = new DateTimeOffset(2026, 9, 10, 12, 0, 0, TimeSpan.Zero);
+
+    // TimeToDeadline is derived from Deadline against the real clock, so the
+    // deadline is set relative to it rather than to the fixed `now` above.
+    WorkspaceSnapshot W(string? build, string? id, string? life = null,
+                        DateTimeOffset? used = null, TimeSpan? left = null) => new()
+    {
+        State = MascotState.Connected, Detail = "",
+        BuildStatus = build, WorkspaceId = id, LifecycleState = life,
+        AgentStatus = id is null ? null : "connected",
+        LastUsedAt = used,
+        Deadline = left is { } span ? DateTimeOffset.UtcNow + span : null,
+    };
+
+    // "ready_to_start" is what Coder actually sends. A lifecycle value with no
+    // underscore in it would make the snake_case check below pass vacuously.
+    var up = W("running", "ws-1", "ready_to_start", now.AddMinutes(-15), TimeSpan.FromHours(2));
+    var down = W("stopped", "ws-1");
+    var unknown = W(null, null);
+
+    // --- what can be pressed
+    Check("a running workspace cannot be started", !WorkspaceView.Offers(up, "https://c").Start);
+    Check("  ...but can be stopped", WorkspaceView.Offers(up, "https://c").Stop);
+    Check("  ...and restarted", WorkspaceView.Offers(up, "https://c").Restart);
+    Check("a stopped workspace can be started", WorkspaceView.Offers(down, "https://c").Start);
+    Check("  ...and not stopped again", !WorkspaceView.Offers(down, "https://c").Stop);
+    Check("  ...nor restarted", !WorkspaceView.Offers(down, "https://c").Restart);
+
+    // Every one of these is an API call needing an id. A button that can only
+    // fail is worse than one that is visibly unavailable.
+    var none = WorkspaceView.Offers(unknown, "https://c");
+    Check("without an id nothing is offered", !none.Start && !none.Stop && !none.Restart);
+    Check("  ...except signing in, which is what you actually need", none.SignIn);
+    Check("and with no URL, not even that", !WorkspaceView.Offers(unknown, "  ").SignIn);
+    Check("a null snapshot offers nothing either",
+          WorkspaceView.Offers(null, null) is { Start: false, Stop: false, Restart: false, SignIn: false });
+
+    // --- what it says
+    var line = WorkspaceView.Facts(up, now);
+    Check("the facts read in order",
+          line.IndexOf("Build:") < line.IndexOf("Agent:")
+          && line.IndexOf("Agent:") < line.IndexOf("Lifecycle:"));
+    Check("snake_case never reaches the screen",
+          line.Contains("ready to start") && !line.Contains('_'));
+    Check("elapsed time is relative to the clock passed in", line.Contains("15 min ago"));
+    Check("the deadline is shown while it is ahead", line.Contains("Auto-stop in"));
+
+    // A deadline in the past is not "in -3 minutes"; it already happened.
+    var expired = W("running", "ws-1", "ready", now, TimeSpan.FromMinutes(-3));
+    Check("a deadline that has passed is not shown",
+          !WorkspaceView.Facts(expired, now).Contains("Auto-stop"));
+
+    // A blank line reads as a panel that failed to draw.
+    Check("nothing known says so", WorkspaceView.Facts(unknown, now) == "\u2014");
+    Check("  ...and so does a null snapshot", WorkspaceView.Facts(null, now) == "\u2014");
+    Check("a partly-known workspace shows only what is known",
+          WorkspaceView.Facts(W("running", null), now) == "Build: running");
+}
+
+// --- What the branch list shows --------------------------------------------
+//
+// All of this used to live in BranchesWindow, where none of it could be
+// asserted — the sort order was defined by a ComboBox's SelectedIndex.
+
+{
+    BranchLine B(string name, string author, string subject,
+                 int day, bool target = false, int? behind = null,
+                 params Landed[] states) => new()
+    {
+        Name = name, Sha = "0000000", Author = author, Subject = subject,
+        Updated = new DateTimeOffset(2026, 9, day, 12, 0, 0, TimeSpan.Zero),
+        IsTarget = target, Behind = behind, Side = RefSide.Remote,
+        Standings = [.. states.Select((st, i) =>
+            new TargetStanding($"env{i}", $"origin/env{i}", st, null))],
+    };
+
+    var prod   = B("production", "lelambang", "Merge branch 'Staging'", 7, target: true);
+    var email  = B("CMS-EmailToAdmin", "Phan Thanh Duc", "Update luong gui mail", 5,
+                   behind: 21, states: [Landed.No, Landed.No]);
+    var luot   = B("Them-thong-tin-luot-ky", "lamdhn", "Cap nhat source tu OS", 3,
+                   behind: 21, states: [Landed.Yes, Landed.Yes]);
+    var half   = B("half-way", "teddy", "partly there", 6, behind: 2,
+                   states: [Landed.Yes, Landed.No]);
+    var murky  = B("murky", "amy", "who knows", 4, behind: null,
+                   states: [Landed.Yes, Landed.Unknown]);
+    var all = new[] { prod, email, luot, half, murky };
+
+    // --- matching
+    Check("an empty filter keeps everything", BranchView.Matching(all, "", null).Count == 5);
+    Check("null input is empty, not a crash", BranchView.Matching(null, "x", null).Count == 0);
+    Check("matches the name", BranchView.Matching(all, "EmailToAdmin", null).Count == 1);
+    Check("  ...ignoring case", BranchView.Matching(all, "emailtoadmin", null).Count == 1);
+    Check("matches the author too", BranchView.Matching(all, "lamdhn", null).Count == 1);
+    Check("and the subject", BranchView.Matching(all, "Cap nhat", null).Count == 1);
+    Check("a filter that matches nothing says so", BranchView.Matching(all, "zzz", null).Count == 0);
+    Check("surrounding space in the query is ignored",
+          BranchView.Matching(all, "  murky  ", null).Count == 1);
+    Check("a view narrows without a query",
+          BranchView.Matching(all, "", BranchGroup.Deploy).Single().Name == "production");
+    Check("  ...and combines with one",
+          BranchView.Matching(all, "production", BranchGroup.Open).Count == 0);
+
+    // --- ordering
+    Check("recent first by default",
+          BranchView.InOrder(all, BranchOrder.Recent)[0].Name == "production");
+    Check("by name is alphabetical, case-insensitively",
+          BranchView.InOrder(all, BranchOrder.Name)[0].Name == "CMS-EmailToAdmin");
+    Check("by author is alphabetical",
+          BranchView.InOrder(all, BranchOrder.Author)[0].Author == "amy");
+    Check("furthest behind leads",
+          BranchView.InOrder(all, BranchOrder.FurthestBehind)[0].Behind == 21);
+
+    // The one that is easy to get wrong: a repo whose git is too old to report
+    // counts has null everywhere, and nulls-first would sort all of it to the
+    // top and call that an ordering.
+    var unknownLast = BranchView.InOrder(all, BranchOrder.FurthestBehind);
+    Check("  ...and unknown counts sort last, not first",
+          unknownLast[^1].Behind is null && unknownLast[^2].Behind is null);
+
+    // --- headed
+    var sorted = BranchView.InOrder(all, BranchOrder.Recent);
+    var headed = BranchView.Bands(sorted, anyDeployBranches: true, view: null);
+    Check("deploy branches head the list", headed[0].Key == BranchGroup.Deploy);
+    Check("  ...and every band is headed", headed.All(b => b.Named));
+    Check("  ...with no empty headed drawn", headed.All(b => b.Branches.Count > 0));
+    Check("  ...and nothing is lost", headed.Sum(b => b.Branches.Count) == 5);
+
+    var order = headed.Select(b => b.Key).ToList();
+    Check("the order is the order of the question",
+          order.IndexOf(BranchGroup.Deploy) < order.IndexOf(BranchGroup.Open)
+          && order.IndexOf(BranchGroup.Open) < order.IndexOf(BranchGroup.Shipped));
+
+    // Without deploy branches nothing has been measured against anything, so
+    // filing everything under "not shipped anywhere" would be a claim.
+    var noTargets = BranchView.Bands(sorted, anyDeployBranches: false, view: null);
+    Check("with no deploy branches there is one unheaded band", noTargets.Count == 1);
+    Check("  ...not headed", !noTargets[0].Named);
+    Check("  ...still holding everything", noTargets[0].Branches.Count == 5);
+
+    // A heading over a list that is already one group labels the whole screen.
+    var narrowed = BranchView.Bands(sorted, true, BranchGroup.Open);
+    Check("a narrowed view drops the heading", !narrowed[0].Named);
+    Check("nothing in, nothing out", BranchView.Bands([], true, null).Count == 0);
+
+    // --- the empty message is four different facts
+    Check("no branches at all", BranchView.Nothing(0, "", null) == "No branches.");
+    Check("none match the filter", BranchView.Nothing(40, "wip", null).Contains("wip"));
+    Check("  ...which beats the group message",
+          BranchView.Nothing(40, "wip", BranchGroup.Tidy).Contains("wip"));
+    Check("an empty Open group is good news",
+          BranchView.Nothing(40, "", BranchGroup.Open).Contains("reached at least one"));
+    Check("an empty Unknown group means everything was checked",
+          BranchView.Nothing(40, "", BranchGroup.Unknown).Contains("checked successfully"));
+    Check("an empty Tidy group has nothing to tidy",
+          BranchView.Nothing(40, "", BranchGroup.Tidy).Contains("tidy"));
+
+    // --- standing precedence
+    Check("a deploy branch is the reference", BranchView.Of(prod) == Standing.Deploy);
+    Check("shipped everywhere reads as shipped", BranchView.Of(luot) == Standing.Shipped);
+    Check("partly shipped is its own answer", BranchView.Of(half) == Standing.Partly);
+    Check("nowhere is open", BranchView.Of(email) == Standing.Open);
+
+    // The precedence that matters, and the only one that is observable:
+    // MergedEverywhere means every standing is Yes and HasUnknowns means one is
+    // Unknown, so those two can never both be true and their order cannot be
+    // seen. Partly and unknown CAN both be true, and there the rule is that not
+    // knowing is not the same as no.
+    Check("murky is genuinely both", murky.HasUnknowns && murky.MergedSomewhere);
+    Check("  ...and the unknown wins", BranchView.Of(murky) == Standing.Unsure);
+}
+
+// --- One line of it ---------------------------------------------------------
+//
+// Three functions called Trim, two identical but for the cap and one that
+// shared the name without flattening newlines. Now one, used at three caps.
+
+{
+    Check("short text is left alone", Friendly.OneLine("port 5173", 40) == "port 5173");
+    Check("a newline becomes a space",
+          Friendly.OneLine("first\nsecond", 40) == "first second");
+    Check("  ...and so does a carriage return",
+          Friendly.OneLine("first\r\nsecond", 40) == "first  second");
+    Check("surrounding space goes", Friendly.OneLine("  padded  ", 40) == "padded");
+    Check("null is empty, not a crash", Friendly.OneLine(null, 40) == "");
+    Check("exactly at the cap is not cut", Friendly.OneLine("12345", 5) == "12345");
+    Check("over the cap is cut and marked", Friendly.OneLine("123456", 5) == "12345\u2026");
+    Check("  ...to exactly the cap plus the mark",
+          Friendly.OneLine(new string('x', 500), 160).Length == 161);
+
+    // The flattening has to happen before the cut, or a newline inside the
+    // first 160 characters survives into a row that has one line to draw.
+    Check("flattened before cut, not after",
+          !Friendly.OneLine("aaaa\nbbbb", 6).Contains('\n'));
+}
+
+// --- Notes kept out of the clear -------------------------------------------
+
+{
+    var dir = Directory.CreateTempSubdirectory("mascot-secret").FullName;
+    var path = Path.Combine(dir, "notes.json");
+    const string Password = "T-Van administrator / OSqVq07Ti791PUae42cB";
+
+    // No cipher: the answer is no, not "yes, stored as before".
+    var bare = new NoteBook(path);
+    var open = bare.Add(Password)!;
+    Check("without a cipher a note cannot be made secret", !bare.MarkSecret(open.Id, true));
+    Check("  ...and it says why", bare.LastError is { Length: > 0 });
+    Check("  ...and the note is left honestly plain", !bare.Find(open.Id)!.Secret);
+    Check("  ...and CanKeepSecrets says so up front", !bare.CanKeepSecrets);
+
+    // With one, the plaintext must not reach the file.
+    var spy = new Turncoat();
+    var book = new NoteBook(path, spy);
+    var note = book.Add(Password)!;
+    var chore = book.Add("rotate the T-Van password")!;
+    Check("with a cipher it can", book.MarkSecret(note.Id, true));
+
+    var onDisk = File.ReadAllText(path);
+    Check("the password is not in the file", !onDisk.Contains("OSqVq07Ti791PUae42cB"));
+    // "T-Van" alone would be the wrong thing to look for: the plain note
+    // beside it says "rotate the T-Van password", and it is supposed to.
+    Check("  ...nor the rest of that note's text", !onDisk.Contains("T-Van administrator"));
+    Check("  ...the sealed form is", onDisk.Contains("rot:"));
+    Check("  ...and the ordinary note beside it still reads plainly",
+          onDisk.Contains("rotate the T-Van password"));
+    Check("  ...so the cipher was actually asked", spy.Seals > 0);
+    Check("  ...and it is still readable in memory", book.Find(note.Id)!.Text == Password);
+
+    // Round trip, same user.
+    var again = NoteBook.Load(path, new Turncoat());
+    Check("it comes back with the same cipher", again.Find(note.Id)?.Text == Password);
+    Check("  ...still marked secret", again.Find(note.Id)!.Secret);
+    Check("  ...and not reported locked", !again.Find(note.Id)!.Locked);
+
+    // Round trip on a machine that cannot read it. This is the one that must
+    // not lose anything.
+    var elsewhere = NoteBook.Load(path, new Stranger());
+    var stranded = elsewhere.Find(note.Id);
+    Check("an unreadable secret is still there", stranded is not null);
+    Check("  ...reported locked rather than blank", stranded!.Locked);
+    Check("  ...with nothing invented for its text", stranded.Text.Length == 0);
+    Check("  ...and its stored bytes intact", stranded.Cipher is { Length: > 0 });
+    Check("  ...and Prune does not sweep it away", elsewhere.Prune() == 0);
+
+    // The mirror image: a secret note the user can read, and empties, is a
+    // deleted note like any other. Keeping it because it happens to hold a
+    // stale cipher would make secret notes impossible to delete by clearing.
+    var emptied = NoteBook.Load(path, new Turncoat());
+    emptied.SetText(note.Id, "   ");
+    Check("emptying a readable secret note deletes it", emptied.Prune() == 1);
+    Check("  ...it cannot be silently unsecreted here", !elsewhere.MarkSecret(note.Id, false));
+
+    // Saving on that machine must write the bytes back untouched, or opening
+    // the file on the wrong laptop once would destroy the note.
+    var before = File.ReadAllText(path);
+    elsewhere.Save();
+    var kept = NoteBook.Load(path, new Turncoat());
+    Check("saving where it could not be read keeps it recoverable",
+          kept.Find(note.Id)?.Text == Password);
+    Check("  ...and did not blank the stored form", File.ReadAllText(path).Contains("rot:"));
+
+    // Turning it back off writes the plain text and drops the cipher.
+    Check("it can be released", kept.MarkSecret(note.Id, false));
+    Check("  ...the file says so now", File.ReadAllText(path).Contains("OSqVq07Ti791PUae42cB"));
+    Check("  ...and the sealed copy is gone", kept.Find(note.Id)!.Cipher is null);
+
+    // A secret on the desktop is not a secret.
+    var stuck = kept.Add("db root pw")!;
+    kept.SetStuck(stuck.Id, true);
+    Check("a note can be on the desktop", kept.Find(stuck.Id)!.Stuck);
+    Check("marking it secret is allowed", kept.MarkSecret(stuck.Id, true));
+    Check("  ...and takes it off the desktop", !kept.Find(stuck.Id)!.Stuck);
+
+    // If it cannot be protected, nothing is written at all — the previous file
+    // stands rather than being replaced by one with the secret in the clear.
+    // Hand-edited to claim both. The desktop window cannot mask anything, so
+    // loading this as stuck would put the secret on screen in the clear.
+    {
+        var forged = Path.Combine(dir, "forged.json");
+        File.WriteAllText(forged,
+            """
+            { "notes": [ { "id": "f1", "text": "", "secret": true,
+                           "stuck": true, "cipher": "rot:terces" } ] }
+            """);
+
+        var read = NoteBook.Load(forged, new Turncoat());
+        Check("a secret note claiming to be on the desktop is not", 
+              read.Find("f1")?.Stuck == false);
+        Check("  ...and is still there and readable", read.Find("f1")?.Text == "secret");
+    }
+
+    var doomed = new NoteBook(path, new Broken());
+    var risky = doomed.Add("something worth protecting")!;
+    var untouched = File.ReadAllText(path);
+    Check("a cipher that cannot seal refuses the mark", !doomed.MarkSecret(risky.Id, true));
+    Check("  ...and does not leave the note believing it is secret",
+          !doomed.Find(risky.Id)!.Secret);
+    Check("  ...and says why", doomed.LastError is { Length: > 0 });
+}
+
+// --- keeping the repositories current ------------------------------------------
+//
+// The background fetch produces a new reading every few minutes, and the only
+// question is whether anything in it is worth a word. The failure to avoid is
+// the one every notification has: firing on the first reading after launch
+// about a whole repository of "new" branches, or on every colleague's feature
+// branch all day, is how a toast gets switched off within the hour.
+
+{
+    var deployed = new Dictionary<string, string> { { "main", "production" } };
+    var stamp = DateTimeOffset.Now;
+
+    BranchLine Ref(string name, string sha, string author = "dev", string subject = "work") =>
+        new() { Name = name, Sha = sha, Updated = stamp, Author = author, Subject = subject };
+
+    ProjectSnapshot Snap(params BranchLine[] lines) =>
+        new() { Name = "app", Path = "/app", Branches = lines, Deployed = deployed };
+
+    var was = Snap(Ref("main", "a1"), Ref("feature/x", "b1"), Ref("gone", "c1"));
+    var next = Snap(Ref("main", "a2", "haph", "Fix login"), Ref("feature/x", "b1"), Ref("feature/new", "d1"));
+    var changes = BranchDiff.Between(was, next);
+
+    Check("a branch on a new commit moved", changes.Moved.Count == 1 && changes.Moved[0].Now.Name == "main");
+    Check("a branch not seen before is new", changes.Added.Count == 1 && changes.Added[0].Name == "feature/new");
+    Check("a branch no longer there is gone", changes.Gone.Count == 1 && changes.Gone[0].Name == "gone");
+    Check("the summary counts them", BranchDiff.Summary(changes) == "1 new · 1 moved · 1 gone");
+    Check("a deploy branch moving is news, with who and what",
+        BranchDiff.DeployNews("app", changes, deployed) is { } line
+        && line.Contains("production (main)") && line.Contains("haph") && line.Contains("Fix login"));
+    Check("a feature branch moving is not",
+        BranchDiff.DeployNews("app", BranchDiff.Between(was, Snap(Ref("main", "a1"), Ref("feature/x", "b2"))), deployed) is null);
+    Check("the first reading compares against nothing", !BranchDiff.Between(null, next).Any);
+    Check("nor does a reading that failed", !BranchDiff.Between(was with { Problem = "no" }, next).Any);
+    Check("nothing changed is nothing to say", BranchDiff.Summary(BranchDiff.Between(was, was)) is null);
+
+    Reset();
+    WriteConfig(new { url = "https://x.io", autoFetchMinutes = -3, ciPollSeconds = 1, announcePipelines = "Failures" });
+    var timing = CoderConfig.Load();
+    Check("a negative fetch interval means off", timing.AutoFetchMinutes == 0);
+    Check("a one-second pipeline poll is clamped up, not honoured", timing.CiPollSeconds == 15);
+    Check("the announcement policy lands on a known word", timing.AnnouncePipelines == "failed");
+
+    Reset();
+    WriteConfig(new { url = "https://x.io" });
+    var defaults = CoderConfig.Load();
+    Check("fetching is on by default", defaults.AutoFetchMinutes == 10);
+    Check("so is the pipeline check", defaults.CiPollSeconds == 60);
+    Check("and every finished pipeline is announced", defaults.AnnouncePipelines == "all" && defaults.AnnounceDeploys);
+}
+
+// --- pipelines: where they are -------------------------------------------------
+//
+// The remote URL is the only thing most people will ever give this, so every
+// spelling git accepts has to land on the same server and project — and the
+// one host whose API lives somewhere else has to be recognised.
+
+{
+    Check("an https remote", CiRemote.Parse("https://git.example.com/team/app.git") == ("git.example.com", "team/app"));
+    Check("an scp-style remote", CiRemote.Parse("git@git.example.com:team/sub/app.git") == ("git.example.com", "team/sub/app"));
+    Check("an ssh remote with a port", CiRemote.Parse("ssh://git@git.example.com:2222/team/app.git") == ("git.example.com", "team/app"));
+    Check("no .git suffix needed", CiRemote.Parse("https://github.com/acme/tool") == ("github.com", "acme/tool"));
+    Check("a bare host is not a project", CiRemote.Parse("https://git.example.com/") is null);
+    Check("a Windows path is not a remote", CiRemote.Parse(@"C:\src\app") is null);
+    Check("nothing is nothing", CiRemote.Parse("  ") is null);
+
+    GitProject Repo(RepoHost host, string path, CiKind ci = CiKind.Auto, string? url = null, string? project = null) =>
+        new() { Name = "x", Path = path, Host = host, Ci = ci, CiUrl = url, CiProject = project };
+
+    var gl = CiRemote.Resolve(Repo(RepoHost.Remote, "https://git.example.com/team/app.git"), null);
+    Check("a URL project needs no remote read", gl is { Provider: CiProvider.GitLab, Project: "team/app" });
+    Check("GitLab's API is under the site", gl!.ApiBase == "https://git.example.com" && gl.Site == "https://git.example.com");
+    Check("and the editor can say where", CiRemote.Describe(gl) == "GitLab at git.example.com · team/app");
+
+    var gh = CiRemote.Resolve(Repo(RepoHost.Workspace, "/home/coder/workspace/projects/tool"), "git@github.com:acme/tool.git");
+    Check("github.com is GitHub", gh is { Provider: CiProvider.GitHub, Project: "acme/tool" });
+    Check("and its API is somewhere else", gh!.ApiBase == "https://api.github.com" && gh.Site == "https://github.com");
+
+    var ghe = CiRemote.Resolve(Repo(RepoHost.Local, "C:/src/tool", CiKind.GitHub), "https://ghe.corp.example/acme/tool.git");
+    Check("GitHub named on another host is Enterprise, with the API under it",
+        ghe is { Provider: CiProvider.GitHub, ApiBase: "https://ghe.corp.example/api/v3" });
+
+    Check("a checkout with no remote yet has nowhere to ask", CiRemote.Resolve(Repo(RepoHost.Workspace, "/x"), null) is null);
+    Check("unless the server and project are given",
+        CiRemote.Resolve(Repo(RepoHost.Workspace, "/x", url: "git.example.com", project: "team/app"), null)
+            is { Site: "https://git.example.com", Project: "team/app" });
+    Check("off is off, whatever the URL says",
+        CiRemote.Resolve(Repo(RepoHost.Remote, "https://git.example.com/team/app.git", CiKind.Off), null) is null);
+    Check("an explicit path wins over the URL's",
+        CiRemote.Resolve(Repo(RepoHost.Remote, "https://git.example.com/team/app.git", project: "other/app"), null)!.Project == "other/app");
+    Check("http:// is refused as a server — a token would cross the wire in the clear",
+        CiRemote.Resolve(Repo(RepoHost.Workspace, "/x", url: "http://git.example.com", project: "a/b"), null) is null);
+
+    // The file's spelling, and the editor's.
+    var written = new ProjectEntry
+    {
+        Path = "https://git.example.com/team/app.git", Where = "remote",
+        Ci = "GitLab", CiUrl = "git.example.com/", CiProject = "/team/app/",
+    }.Tidy();
+
+    Check("ci is spelled one way", written.Ci == "gitlab");
+    Check("the server is made a URL", written.CiUrl == "https://git.example.com");
+    Check("the project path loses its slashes", written.CiProject == "team/app");
+    Check("and reads back", written.ToProject().Ci == CiKind.GitLab && written.ToProject().CiProject == "team/app");
+    Check("auto is the default and is not written", new ProjectEntry { Path = "/x", Ci = "  " }.Tidy().Ci is null);
+    Check("a config from before pipelines existed is auto", new ProjectEntry { Path = "/x" }.Tidy().ToProject().Ci == CiKind.Auto);
+    Check("a server address git would read as a command is dropped, not saved",
+        new ProjectEntry { Path = "/x", CiUrl = "ext::sh -c id" }.Tidy().CiUrl is null);
+
+    var edit = ProjectDraft.From(written);
+    Check("the editor sees the setting", edit.Ci == CiKind.GitLab && edit.CiUrl == "https://git.example.com");
+    edit.Ci = CiKind.Off;
+    Check("and writes it back", edit.ToEntry().Ci == "off");
+    edit.Ci = CiKind.Auto;
+    edit.CiUrl = "http://git.example.com";
+    Check("a server address a token must not go to blocks saving", edit.CiProblem is not null);
+    edit.CiUrl = string.Empty;
+    Check("blank is fine", edit.CiProblem is null);
+
+    Check("the password comes out of git's answer",
+        GitSignIn.Secret("protocol=https\nhost=git.example.com\nusername=ducpt\npassword=glpat-abc\n") == "glpat-abc");
+    Check("and nothing when there is none", GitSignIn.Secret("protocol=https\nhost=x\n") is null);
+    Check("an empty password is none", GitSignIn.Secret("password=\n") is null);
+}
+
+// --- pipelines: what the servers say -------------------------------------------
+//
+// A status mapped to the wrong word is a window confidently reporting a broken
+// build as green, so the parsers are run against the shapes the two APIs
+// actually print — including the rows they print thin.
+
+{
+    Check("GitLab's cancelled", CiParse.GitLabState("canceled") == PipelineState.Cancelled);
+    Check("GitLab's manual is waiting on someone", CiParse.GitLabState("manual") == PipelineState.Waiting);
+    Check("GitLab's queue is pending", CiParse.GitLabState("waiting_for_resource") == PipelineState.Pending);
+    Check("a word nobody expected is unknown, not passed", CiParse.GitLabState("bogus") == PipelineState.Unknown);
+    Check("GitHub's timed out is a failure", CiParse.GitHubState("completed", "timed_out") == PipelineState.Failed);
+    Check("GitHub's queued", CiParse.GitHubState("queued", null) == PipelineState.Pending);
+    Check("GitHub's action required is waiting", CiParse.GitHubState("completed", "action_required") == PipelineState.Waiting);
+    Check("GitHub's neutral is a pass", CiParse.GitHubState("completed", "neutral") == PipelineState.Passed);
+    Check("waiting on a person is neither live nor done", !PipelineState.Waiting.Live() && !PipelineState.Waiting.Done());
+
+    var gitlabList = """
+    [
+      {"id": 4712, "iid": 32, "project_id": 9, "status": "running", "source": "push", "ref": "feature/x", "sha": "aaa111",
+       "web_url": "https://git.example.com/team/app/-/pipelines/4712", "created_at": "2026-09-21T02:10:00.000Z", "updated_at": "2026-09-21T02:11:00.000Z"},
+      {"id": 4711, "iid": 31, "project_id": 9, "status": "failed", "source": "push", "ref": "main", "sha": "bbb222",
+       "web_url": "https://git.example.com/team/app/-/pipelines/4711", "created_at": "2026-09-21T01:00:00.000Z", "updated_at": "2026-09-21T01:04:30.000Z"},
+      {"id": 4710, "status": "success", "ref": "main", "sha": "ccc333", "web_url": "https://git.example.com/team/app/-/pipelines/4710",
+       "created_at": "2026-09-20T09:00:00.000Z", "updated_at": "2026-09-20T09:05:00.000Z"},
+      {"id": 4709, "status": "manual", "ref": "release", "sha": "ddd444", "web_url": "u", "created_at": "2026-09-19T09:00:00.000Z", "updated_at": "2026-09-19T09:00:00.000Z"},
+      {"status": "success", "ref": "orphan"}
+    ]
+    """;
+
+    var gitlab = CiParse.GitLabPipelines(gitlabList);
+    Check("every row with an id, a ref and a link is read", gitlab.Count == 4);
+    Check("a row missing those is skipped, not crashed on", gitlab.All(p => p.Branch != "orphan"));
+    Check("ids are strings whatever the server sent", gitlab[0].Id == "4712");
+    Check("running is running", gitlab[0].State == PipelineState.Running && gitlab[0].Live);
+    Check("failed is failed", gitlab[1].State == PipelineState.Failed && gitlab[1].Done);
+    Check("manual is waiting", gitlab[3].State == PipelineState.Waiting);
+    Check("times are read as UTC", gitlab[1].UpdatedAt == new DateTimeOffset(2026, 9, 21, 1, 4, 30, TimeSpan.Zero));
+    Check("the list endpoint knows no title", gitlab[1].Title is null);
+    Check("garbage is an empty list, not an exception", CiParse.GitLabPipelines("<html>").Count == 0);
+
+    var gitlabDetail = """
+    {"id": 4711, "status": "failed", "duration": 270, "started_at": "2026-09-21T01:00:10.000Z",
+     "finished_at": "2026-09-21T01:04:40.000Z", "user": {"name": "Phan Đức", "username": "ducpt"}}
+    """;
+
+    var detailed = CiParse.GitLabDetail(gitlabDetail, gitlab[1]);
+    Check("the detail adds how long it took", detailed.Duration == TimeSpan.FromSeconds(270));
+    Check("and who", detailed.Actor == "Phan Đức");
+    Check("and when it ended", detailed.FinishedAt == new DateTimeOffset(2026, 9, 21, 1, 4, 40, TimeSpan.Zero));
+
+    var gitlabJobs = """
+    [
+      {"id": 9, "name": "unit-tests", "stage": "test", "status": "failed", "failure_reason": "script_failure", "allow_failure": false,
+       "duration": 130.5, "web_url": "https://git.example.com/team/app/-/jobs/9",
+       "runner": {"id": 3, "description": "gitlab-runner-01", "is_shared": false}, "commit": {"title": "Fix the cap", "author_name": "haph"}},
+      {"id": 8, "name": "lint", "stage": "test", "status": "failed", "failure_reason": "script_failure", "allow_failure": true,
+       "duration": 10, "runner": null, "commit": {"title": "Fix the cap", "author_name": "haph"}},
+      {"id": 7, "name": "compile", "stage": "build", "status": "success", "duration": 60,
+       "runner": {"description": "gitlab-runner-01"}, "commit": {"title": "Fix the cap", "author_name": "haph"}}
+    ]
+    """;
+
+    var jobs = CiParse.GitLabJobs(gitlabJobs);
+    Check("every job is read, oldest first", jobs.Jobs.Count == 3 && jobs.Jobs[0].Name == "compile");
+    Check("the runner is named", jobs.Jobs[2].Runner == "gitlab-runner-01");
+    Check("a runner not yet assigned is none", jobs.Jobs[1].Runner is null);
+    Check("the reason is said plainly", jobs.Jobs[2].FailureReason == "the script failed");
+    Check("an allowed failure is marked as such", jobs.Jobs[1].AllowFailure && !jobs.Jobs[2].AllowFailure);
+    Check("the commit's title and author come with the jobs", jobs.Title == "Fix the cap" && jobs.Author == "haph");
+    Check("a runner fault is told apart from a script fault",
+        CiParse.Reason("runner_system_failure") == "the runner itself failed");
+
+    var red = detailed with { Jobs = jobs.Jobs, Title = jobs.Title };
+    Check("the job to blame is the one whose failure was not allowed", red.Spotlight?.Name == "unit-tests");
+    Check("and the job line says where and why",
+        CiWatch.JobLine(red.Spotlight!) == "test › unit-tests on gitlab-runner-01 — the script failed (2m 10s)");
+
+    var githubRuns = """
+    {"total_count": 3, "workflow_runs": [
+      {"id": 101, "name": "CI", "display_title": "Add pipelines pane", "head_branch": "feature/ci", "head_sha": "eee555",
+       "status": "in_progress", "conclusion": null, "event": "push", "html_url": "https://github.com/acme/tool/actions/runs/101",
+       "created_at": "2026-09-21T03:00:00Z", "updated_at": "2026-09-21T03:01:00Z", "run_started_at": "2026-09-21T03:00:05Z", "actor": {"login": "ducpt"}},
+      {"id": 100, "name": "CI", "display_title": "Release 1.2", "head_branch": "main", "head_sha": "fff666",
+       "status": "completed", "conclusion": "failure", "event": "push", "html_url": "https://github.com/acme/tool/actions/runs/100",
+       "created_at": "2026-09-20T03:00:00Z", "updated_at": "2026-09-20T03:06:30Z", "run_started_at": "2026-09-20T03:00:30Z", "actor": {"login": "haph"}},
+      {"id": 99, "name": "Deploy", "display_title": "Release 1.2", "head_branch": "main", "head_sha": "fff666",
+       "status": "completed", "conclusion": "success", "event": "push", "html_url": "u99",
+       "created_at": "2026-09-20T03:00:00Z", "updated_at": "2026-09-20T03:08:00Z", "run_started_at": "2026-09-20T03:01:00Z"}
+    ]}
+    """;
+
+    var github = CiParse.GitHubRuns(githubRuns);
+    Check("one row per run", github.Count == 3);
+    Check("in progress is running", github[0].State == PipelineState.Running && github[0].Actor == "ducpt");
+    Check("a failed conclusion is failed", github[1].State == PipelineState.Failed);
+    Check("how long it took is start to last update", github[1].Duration == TimeSpan.FromMinutes(6));
+    Check("the workflow's name is kept apart from the title", github[1].Workflow == "CI" && github[1].Title == "Release 1.2");
+    Check("a run still going has no length yet", github[0].Duration is null);
+
+    var githubJobs = """
+    {"total_count": 1, "jobs": [
+      {"id": 5, "name": "build", "status": "completed", "conclusion": "failure", "started_at": "2026-09-20T03:00:40Z",
+       "completed_at": "2026-09-20T03:06:00Z", "html_url": "u", "runner_name": "ubuntu-runner-7",
+       "steps": [{"name": "Checkout", "status": "completed", "conclusion": "success", "number": 1},
+                 {"name": "Run tests", "status": "completed", "conclusion": "failure", "number": 2}]}
+    ]}
+    """;
+
+    var ghJobs = CiParse.GitHubJobs(githubJobs).Jobs;
+    Check("GitHub names its runner too", ghJobs.Count == 1 && ghJobs[0].Runner == "ubuntu-runner-7");
+    Check("and the failed step stands in for a reason", ghJobs[0].FailureReason == "step “Run tests”");
+    Check("with how long the job took", ghJobs[0].Duration == TimeSpan.FromSeconds(320));
+}
+
+// --- pipelines: what they mean -------------------------------------------------
+//
+// Which run speaks for a branch, when a deploy branch counts as broken, and
+// what finished since the last look. Each has a way of being quietly wrong: a
+// deploy run hidden behind a build run on the same commit, a red feature
+// branch parking the mascot, a first reading announcing yesterday.
+
+{
+    var clock = DateTimeOffset.Now;
+
+    Pipeline Run(string id, string branch, PipelineState state, string sha, int minutesAgo, string? title = null, params PipelineJob[] jobs) =>
+        new()
+        {
+            Id = id, Branch = branch, State = state, Status = state.Word(), Sha = sha, Title = title,
+            CreatedAt = clock.AddMinutes(-minutesAgo),
+            UpdatedAt = clock.AddMinutes(-minutesAgo + 1),
+            FinishedAt = state.Done() ? clock.AddMinutes(-minutesAgo + 1) : null,
+            Url = "https://ci/" + id,
+            Jobs = jobs,
+        };
+
+    var unit = new PipelineJob("unit", "test", PipelineState.Failed, "runner-01", TimeSpan.FromSeconds(90), "the script failed", false, null);
+
+    // Two workflows for one push: the build passed after the deploy failed.
+    var sameCommit = new[] { Run("1", "main", PipelineState.Failed, "s1", 10), Run("2", "main", PipelineState.Passed, "s1", 9) };
+    Check("the worst run on the newest commit speaks for the branch",
+        CiWatch.LatestOn(sameCommit, "main")?.Id == "1");
+    Check("a newer commit's run outranks an older commit's failure",
+        CiWatch.LatestOn([.. sameCommit, Run("3", "main", PipelineState.Passed, "s2", 2)], "main")?.Id == "3");
+    Check("a branch with no runs has no answer", CiWatch.LatestOn(sameCommit, "dev") is null);
+    Check("one row per branch, newest first",
+        CiWatch.LatestPerBranch([.. sameCommit, Run("4", "dev", PipelineState.Passed, "d", 1)]).Select(p => p.Branch).SequenceEqual(["dev", "main"]));
+
+    var app = new GitProject
+    {
+        Name = "app", Path = "/app",
+        Deployed = new Dictionary<string, string> { { "main", "production" }, { "staging", "staging" } },
+    };
+
+    var reading = new CiSnapshot
+    {
+        ProjectId = app.Id,
+        Pipelines =
+        [
+            Run("1", "main", PipelineState.Failed, "s1", 10, "Fix the cap", unit),
+            Run("2", "feature/x", PipelineState.Failed, "s2", 5),
+            Run("3", "staging", PipelineState.Passed, "s3", 20),
+        ],
+    };
+
+    var broken = CiWatch.Broken([(app, reading)]);
+    Check("a red deploy branch is broken", broken.Count == 1 && broken[0].Branch == "main" && broken[0].Environment == "production");
+    Check("a red feature branch is that branch's own business", broken.All(b => b.Branch != "feature/x"));
+    Check("and the line names the job and the runner",
+        CiWatch.Describe(broken).Contains("unit") && CiWatch.Describe(broken).Contains("runner-01"));
+    Check("a reading with a problem breaks nothing", CiWatch.Broken([(app, reading with { Problem = "x" })]).Count == 0);
+    Check("nor does a sign-in that is missing", CiWatch.Broken([(app, reading with { NeedsSignIn = true })]).Count == 0);
+    Check("a newer green run on the branch clears it",
+        CiWatch.Broken([(app, reading with { Pipelines = [.. reading.Pipelines, Run("4", "main", PipelineState.Passed, "s4", 1)] })]).Count == 0);
+    Check("a repository with no deploy branches can't be broken",
+        CiWatch.Broken([(new GitProject { Name = "x", Path = "/x" }, reading)]).Count == 0);
+
+    var earlier = new CiSnapshot
+    {
+        ProjectId = app.Id, ReadAt = clock.AddMinutes(-3),
+        Pipelines = [Run("10", "main", PipelineState.Running, "a", 4), Run("11", "dev", PipelineState.Passed, "b", 60)],
+    };
+    var later = new CiSnapshot
+    {
+        ProjectId = app.Id, ReadAt = clock,
+        Pipelines =
+        [
+            Run("10", "main", PipelineState.Passed, "a", 4) with { UpdatedAt = clock.AddMinutes(-1), FinishedAt = clock.AddMinutes(-1) },
+            Run("11", "dev", PipelineState.Passed, "b", 60),
+            Run("12", "hotfix", PipelineState.Failed, "c", 2),
+            Run("13", "old", PipelineState.Failed, "d", 500),
+        ],
+    };
+
+    var news = CiWatch.Finished(earlier, later);
+    Check("a run that was going and is done is news", news.Any(p => p.Id == "10"));
+    Check("one that was already done is not", news.All(p => p.Id != "11"));
+    Check("one that appeared and finished since the last look is", news.Any(p => p.Id == "12"));
+    Check("one that finished long before the last look is not", news.All(p => p.Id != "13"));
+    Check("the first reading announces nothing", CiWatch.Finished(null, later).Count == 0);
+    Check("nor does the one after a reading that had failed", CiWatch.Finished(earlier with { Problem = "boom" }, later).Count == 0);
+
+    Check("all announces a pass", CiWatch.Announce("all", Run("1", "main", PipelineState.Passed, "s", 1)));
+    Check("failed keeps quiet about a pass", !CiWatch.Announce("failed", Run("1", "main", PipelineState.Passed, "s", 1)));
+    Check("  ...and speaks up about a failure", CiWatch.Announce("failed", Run("1", "main", PipelineState.Failed, "s", 1)));
+    Check("off is off", !CiWatch.Announce("off", Run("1", "main", PipelineState.Failed, "s", 1)));
+    Check("a typo lands on all", CiWatch.Policy("evrything") == "all");
+    Check("a run still going is never announced", !CiWatch.Announce("all", Run("1", "main", PipelineState.Running, "s", 1)));
+
+    var (title, text) = CiWatch.Describe("app", Run("1", "main", PipelineState.Failed, "s", 1, "Fix the cap", unit));
+    Check("a failure names the job, the reason and the commit",
+        title == "Pipeline failed" && text.Contains("unit") && text.Contains("the script failed") && text.Contains("Fix the cap"));
+
+    var (batchTitle, batchText) = CiWatch.Describe(
+        [new PipelineNews("app", Run("1", "main", PipelineState.Failed, "s", 1)), new PipelineNews("api", Run("2", "main", PipelineState.Passed, "t", 1))]);
+    Check("several become one line with the counts",
+        batchTitle == "2 pipelines finished" && batchText.Contains("1 failed") && batchText.Contains("1 passed") && batchText.Contains("api"));
+
+    Check("a build's length reads as minutes and seconds", CiWatch.Clock(TimeSpan.FromSeconds(252)) == "4m 12s");
+    Check("  ...hours once it is that long", CiWatch.Clock(TimeSpan.FromMinutes(63)) == "1h 03m");
+    Check("  ...and never less than a second", CiWatch.Clock(TimeSpan.Zero) == "1s");
+
+    Check("a running run carries its clock",
+        CiWatch.Label(Run("1", "main", PipelineState.Running, "s", 5) with { StartedAt = clock.AddMinutes(-2) }, clock) == "● running · 2m 00s");
+    Check("a finished one says when", CiWatch.Label(Run("1", "main", PipelineState.Passed, "s", 30), clock).StartsWith("✓ passed · "));
+
+    Check("off says so", CiWatch.Nothing(null, CiKind.Off, true).Contains("switched off"));
+    Check("no sign-in says which server",
+        CiWatch.Nothing(new CiSnapshot { ProjectId = "x", NeedsSignIn = true, Target = new CiTarget(CiProvider.GitLab, "https://git.example.com", "https://git.example.com", "t/a") }, CiKind.Auto, true)
+            .Contains("git.example.com"));
+    Check("polling off names the setting", CiWatch.Nothing(null, CiKind.Auto, false).Contains("ciPollSeconds"));
+
+    Check("a failed pipeline is not an alarm — the sessions are fine", !MascotState.PipelineFailed.IsAlarm());
+    Check("but it does bring the mascot over", MascotState.PipelineFailed.NeedsAttention());
+}
+
 Console.WriteLine(failures == 0 ? "\nALL PASS" : $"\n{failures} FAILED");
 return failures;
+
+// --- Notes kept out of the clear -------------------------------------------
+//
+// Prompted by finding live infrastructure passwords sitting in a real
+// notes.json in plain text. The rule the code has to hold is narrow and worth
+// stating: a note marked secret is never written in the clear, and a note whose
+// only surviving copy is its ciphertext is never thrown away.
+
+// Not encryption, and not pretending to be: just a reversible transform, so the
+// seam can be exercised where DPAPI does not exist.
+sealed class Turncoat : CoderMascot.Core.INoteCipher
+{
+    public int Seals;
+    public string? Seal(string plain)
+    {
+        Seals++;
+        return "rot:" + new string(plain.Reverse().ToArray());
+    }
+
+    public string? Unseal(string sealed_) =>
+        sealed_.StartsWith("rot:", StringComparison.Ordinal)
+            ? new string(sealed_[4..].Reverse().ToArray())
+            : null;
+}
+
+/// <summary>A cipher that can seal but never read back — another machine.</summary>
+sealed class Stranger : CoderMascot.Core.INoteCipher
+{
+    public string? Seal(string plain) => "rot:" + new string(plain.Reverse().ToArray());
+    public string? Unseal(string sealed_) => null;
+}
+
+/// <summary>One that cannot protect anything at all.</summary>
+sealed class Broken : CoderMascot.Core.INoteCipher
+{
+    public string? Seal(string plain) => null;
+    public string? Unseal(string sealed_) => null;
+}

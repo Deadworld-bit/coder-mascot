@@ -24,6 +24,9 @@
     <Compile Include="../../Core/LeftoverWatch.cs" />
     <Compile Include="../../Core/StateHistory.cs" />
     <Compile Include="../../Core/NoteBook.cs" />
+    <!-- The interface only. WindowsNoteCipher is DPAPI, which is why the seam
+         exists: these checks run on Linux. -->
+    <Compile Include="../../Core/INoteCipher.cs" />
     <Compile Include="../../Core/StickyNote.cs" />
     <Compile Include="../../Core/Hotkey.cs" />
     <Compile Include="../../Core/LocalPorts.cs" />
@@ -38,8 +41,21 @@
     <Compile Include="../../Core/GitParse.cs" />
     <Compile Include="../../Core/GitRefs.cs" />
     <Compile Include="../../Core/ProjectGroup.cs" />
+    <Compile Include="../../Core/BranchView.cs" />
+    <Compile Include="../../Core/WorkspaceView.cs" />
+    <Compile Include="../../Core/CoderClient.cs" />
     <Compile Include="../../Core/GitReader.cs" />
     <Compile Include="../../Core/GitCli.cs" />
+    <!-- StatusMonitor is here for the wake-up event the two loops below share. -->
+    <Compile Include="../../Core/StatusMonitor.cs" />
+    <Compile Include="../../Core/CiModel.cs" />
+    <Compile Include="../../Core/CiRemote.cs" />
+    <Compile Include="../../Core/CiParse.cs" />
+    <Compile Include="../../Core/CiWatch.cs" />
+    <Compile Include="../../Core/CiClient.cs" />
+    <Compile Include="../../Core/CiMonitor.cs" />
+    <Compile Include="../../Core/RepoMonitor.cs" />
+    <Compile Include="../../Core/BranchDiff.cs" />
     <Compile Include="Program.cs" />
   </ItemGroup>
 
