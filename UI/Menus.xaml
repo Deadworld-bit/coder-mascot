@@ -1,0 +1,243 @@
+<!--
+    The right-click menu, dark.
+
+    A file of its own because two kinds of window need it: the chrome windows get
+    it through Controls.xaml, and the mascot merges it directly — it must not
+    merge Controls.xaml, whose implicit styles would repaint a desktop object.
+    So nothing here may use a key from Controls.xaml: Theme.xaml brushes
+    (application-wide) and literals only.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ===================== a row in a menu ===================== -->
+
+    <ControlTemplate x:Key="MenuRowTemplate" TargetType="MenuItem">
+        <Border x:Name="Row" CornerRadius="4" SnapsToDevicePixels="True"
+                Background="{TemplateBinding Background}"
+                Padding="{TemplateBinding Padding}">
+            <Grid VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" MinWidth="20" SharedSizeGroup="MenuMark" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="MenuGesture" />
+                    <ColumnDefinition Width="16" />
+                </Grid.ColumnDefinitions>
+
+                <ContentPresenter ContentSource="Icon" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <Path x:Name="Tick" Visibility="Collapsed"
+                      Data="M 0,4.5 L 3.5,8 L 10,1"
+                      Stroke="{StaticResource Pick}" StrokeThickness="1.75"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"
+                                  Margin="4,0,16,0" VerticalAlignment="Center">
+                    <ContentPresenter.Resources>
+                        <Style TargetType="TextBlock" />
+                    </ContentPresenter.Resources>
+                </ContentPresenter>
+                <TextBlock x:Name="Gesture" Grid.Column="2" Text="{TemplateBinding InputGestureText}"
+                           Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Row" Property="Background" Value="{StaticResource Lift}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource Dim}" />
+                <Setter TargetName="Gesture" Property="Foreground" Value="{StaticResource Dim}" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <!-- The same row with a chevron, and the submenu beside it. -->
+    <ControlTemplate x:Key="MenuParentTemplate" TargetType="MenuItem">
+        <Grid>
+            <Border x:Name="Row" CornerRadius="4" SnapsToDevicePixels="True"
+                    Background="{TemplateBinding Background}"
+                    Padding="{TemplateBinding Padding}">
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MinWidth="20" SharedSizeGroup="MenuMark" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="MenuGesture" />
+                        <ColumnDefinition Width="16" />
+                    </Grid.ColumnDefinitions>
+
+                    <ContentPresenter ContentSource="Icon" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"
+                                      Margin="4,0,16,0" VerticalAlignment="Center">
+                        <ContentPresenter.Resources>
+                            <Style TargetType="TextBlock" />
+                        </ContentPresenter.Resources>
+                    </ContentPresenter>
+                    <TextBlock x:Name="Gesture" Grid.Column="2" Text="{TemplateBinding InputGestureText}"
+                               Foreground="{StaticResource Faint}" VerticalAlignment="Center" />
+                    <Path x:Name="Chevron" Grid.Column="3" Data="M 0,0 L 4,4 L 0,8"
+                          Stroke="{StaticResource Faint}" StrokeThickness="1.5"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+            <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="-4" VerticalOffset="-5"
+                   AllowsTransparency="True" Focusable="False" PopupAnimation="Fade"
+                   IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                <Border Background="{StaticResource Head}" BorderBrush="{StaticResource Line}"
+                        BorderThickness="1" CornerRadius="6" Padding="4" SnapsToDevicePixels="True">
+                    <ScrollViewer CanContentScroll="True"
+                                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <ItemsPresenter Grid.IsSharedSizeScope="True"
+                                        KeyboardNavigation.DirectionalNavigation="Cycle"
+                                        KeyboardNavigation.TabNavigation="Cycle" />
+                    </ScrollViewer>
+                </Border>
+            </Popup>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Row" Property="Background" Value="{StaticResource Lift}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource Dim}" />
+                <Setter TargetName="Gesture" Property="Foreground" Value="{StaticResource Dim}" />
+                <Setter TargetName="Chevron" Property="Stroke" Value="{StaticResource Dim}" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <!-- The app has no menu bar; these exist so a MenuItem placed in one would
+         not fall back to the light theme. -->
+    <ControlTemplate x:Key="MenuBarItemTemplate" TargetType="MenuItem">
+        <Border x:Name="Row" CornerRadius="4" SnapsToDevicePixels="True"
+                Background="{TemplateBinding Background}"
+                Padding="{TemplateBinding Padding}">
+            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center">
+                <ContentPresenter.Resources>
+                    <Style TargetType="TextBlock" />
+                </ContentPresenter.Resources>
+            </ContentPresenter>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Row" Property="Background" Value="{StaticResource Lift}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource Dim}" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="MenuBarParentTemplate" TargetType="MenuItem">
+        <Grid>
+            <Border x:Name="Row" CornerRadius="4" SnapsToDevicePixels="True"
+                    Background="{TemplateBinding Background}"
+                    Padding="{TemplateBinding Padding}">
+                <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center">
+                    <ContentPresenter.Resources>
+                        <Style TargetType="TextBlock" />
+                    </ContentPresenter.Resources>
+                </ContentPresenter>
+            </Border>
+            <Popup x:Name="PART_Popup" Placement="Bottom" VerticalOffset="2"
+                   AllowsTransparency="True" Focusable="False" PopupAnimation="Fade"
+                   IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                <Border Background="{StaticResource Head}" BorderBrush="{StaticResource Line}"
+                        BorderThickness="1" CornerRadius="6" Padding="4" SnapsToDevicePixels="True">
+                    <ScrollViewer CanContentScroll="True"
+                                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <ItemsPresenter Grid.IsSharedSizeScope="True"
+                                        KeyboardNavigation.DirectionalNavigation="Cycle"
+                                        KeyboardNavigation.TabNavigation="Cycle" />
+                    </ScrollViewer>
+                </Border>
+            </Popup>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Row" Property="Background" Value="{StaticResource Lift}" />
+            </Trigger>
+            <Trigger Property="IsSubmenuOpen" Value="True">
+                <Setter TargetName="Row" Property="Background" Value="{StaticResource Lift}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource Dim}" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <Style TargetType="MenuItem">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        <Setter Property="FontFamily" Value="Segoe UI" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Template" Value="{StaticResource MenuRowTemplate}" />
+        <Style.Triggers>
+            <Trigger Property="Role" Value="SubmenuHeader">
+                <Setter Property="Template" Value="{StaticResource MenuParentTemplate}" />
+            </Trigger>
+            <Trigger Property="Role" Value="TopLevelItem">
+                <Setter Property="Template" Value="{StaticResource MenuBarItemTemplate}" />
+            </Trigger>
+            <Trigger Property="Role" Value="TopLevelHeader">
+                <Setter Property="Template" Value="{StaticResource MenuBarParentTemplate}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Margin" Value="4,4" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="1" Background="{StaticResource Hair}" SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ===================== the menu itself ===================== -->
+
+    <Style TargetType="ContextMenu">
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="Grid.IsSharedSizeScope" Value="True" />
+        <Setter Property="Background" Value="{StaticResource Head}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        <Setter Property="FontFamily" Value="Segoe UI" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border CornerRadius="6" SnapsToDevicePixels="True"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            RenderOptions.ClearTypeHint="Enabled">
+                        <ScrollViewer CanContentScroll="True"
+                                      HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"
+                                            SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

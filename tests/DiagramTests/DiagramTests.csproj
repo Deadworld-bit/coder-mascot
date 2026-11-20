@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Plain net8.0 so the diagram-link rules run on Linux. The project entry
+       pulls in CoderConfig's sieve and the CI types, hence the list. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>CoderMascot.DiagramTests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Core/DiagramLink.cs" />
+    <Compile Include="../../Core/DiagramMenu.cs" />
+    <Compile Include="../../Core/CoderConfig.cs" />
+    <Compile Include="../../Core/LogSource.cs" />
+    <Compile Include="../../Core/AlertGate.cs" />
+    <Compile Include="../../Core/Character.cs" />
+    <Compile Include="../../Core/Pose.cs" />
+    <Compile Include="../../Core/Perimeter.cs" />
+    <Compile Include="../../Core/Hotkey.cs" />
+    <Compile Include="../../Core/GitModel.cs" />
+    <Compile Include="../../Core/ProjectDraft.cs" />
+    <Compile Include="../../Core/ProjectGroup.cs" />
+    <Compile Include="../../Core/GitUrl.cs" />
+    <Compile Include="../../Core/GitSignIn.cs" />
+    <Compile Include="../../Core/SessionLine.cs" />
+    <Compile Include="../../Core/MascotState.cs" />
+    <Compile Include="../../Core/CiModel.cs" />
+    <Compile Include="../../Core/CiRemote.cs" />
+    <Compile Include="../../Core/CiParse.cs" />
+    <Compile Include="../../Core/CiWatch.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+
+</Project>

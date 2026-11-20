@@ -52,6 +52,14 @@
     <Resource Include="Assets/sprites/**/*.png" />
   </ItemGroup>
 
+  <!-- Log tables (docs/PLAN-LOG-SOURCES.md, D16). SqlClient 7 is the one without
+       Azure.Identity/MSAL in tow; its native SNI rides in the single-file exe via
+       IncludeNativeLibrariesForSelfExtract below. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
+    <PackageReference Include="MongoDB.Driver" Version="3.11.1" />
+  </ItemGroup>
+
   <!-- Single-file packaging only when a RID is given (i.e. `publish -r win-x64`).
        Leaving these unconditional makes a plain `dotnet build` on Linux try to
        resolve a linux-x64 WindowsDesktop runtime pack, which does not exist. -->

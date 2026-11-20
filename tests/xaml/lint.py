@@ -39,7 +39,8 @@ WANTS = {
     "CornerRadius": "CornerRadius",
     "FontFamily": "FontFamily",
     "Effect": "Effect", "ItemTemplate": "DataTemplate",
-    "Style": "Style", "BasedOn": "Style", "Template": "ControlTemplate",
+    "Style": "Style", "BasedOn": "Style", "FocusVisualStyle": "Style", "ItemContainerStyle": "Style",
+    "Template": "ControlTemplate",
 }
 
 # What each declared element yields.

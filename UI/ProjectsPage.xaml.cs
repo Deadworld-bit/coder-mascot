@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using CoderMascot.Core;
 
 using Brush = System.Windows.Media.Brush;
@@ -68,10 +70,10 @@ public interface IBranchHost
 
 public sealed record ProjectRow(string Id, string Name, string Sub, string Tip,
                                 string Badge, Visibility BadgeShown, Thickness Indent,
-                                Brush Back, Brush Edge, Brush Mark, Brush BadgeBack, Brush BadgeInk);
+                                bool Selected, Brush Bar, Brush BadgeBack, Brush BadgeInk);
 
 /// <summary>
-/// A heading in the project rail, which is also the control that folds it.
+/// A heading in the repository pane, which is also the control that folds it.
 ///
 /// The open/shut triangle is a drawn shape picked by visibility rather than a
 /// character in a font, because the one control here that hides half the list is
@@ -80,7 +82,7 @@ public sealed record ProjectRow(string Id, string Name, string Sub, string Tip,
 public sealed record GroupBar(string Key, string Title, string Count, Visibility CountShown, string Tip,
                               Visibility ShutShown, Visibility OpenShown,
                               string Badge, Visibility BadgeShown,
-                              Brush Ink, Brush Mark, Brush BadgeBack, Brush BadgeInk);
+                              Brush Ink, bool Selected, Brush Bar, Brush BadgeBack, Brush BadgeInk);
 
 /// <summary>A heading inside the branch list, with how many are under it.</summary>
 public sealed record GroupHeader(string Title, string Count, string Note, Brush Accent);
@@ -102,15 +104,44 @@ public sealed record BranchRow(string Name, string Sub, string Counts, string Co
                                Brush Accent, Brush Back,
                                string TargetLabel, Visibility TargetShown,
                                string SideLabel, Visibility SideShown,
-                               IReadOnlyList<StandingPill> Pills);
+                               IReadOnlyList<StandingPill> Pills, TraceMark Traced);
+
+/// <summary>
+/// Whether one branch is the one the timeline is filtered to.
+///
+/// The one thing about a row that changes without the list being rebuilt:
+/// rebuilding it would throw away the button that was just pressed, and the
+/// keyboard focus with it.
+/// </summary>
+public sealed class TraceMark(bool marked) : INotifyPropertyChanged
+{
+    private bool _on = marked;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public bool On
+    {
+        get => _on;
+        set
+        {
+            if (_on == value) return;
+
+            _on = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(On)));
+        }
+    }
+}
 
 public sealed record LandingRow(string Day, Visibility DayShown, string Source, string When,
                                 string Detail, Brush Accent, double Fade);
 
+/// <summary>A linked diagram: press to open it, right-click to change it.</summary>
+public sealed record DiagramChip(string Target, string Title, string Kind, string Tip);
+
 /// <summary>
 /// Where work has got to, across every repository.
 ///
-/// The question this window exists for is one you cannot answer from a branch
+/// The question this page exists for is one you cannot answer from a branch
 /// list: *is the thing I wrote three weeks ago in what the server is running?*
 /// Git can answer it, but only by asking it several questions per branch and
 /// holding the answers in your head — which is exactly what stops being possible
@@ -121,9 +152,10 @@ public sealed record LandingRow(string Day, Visibility DayShown, string Source, 
 /// signal — every pill says "staging · 2d ago" or "production · not yet" in
 /// words, because a room full of green and grey dots is a puzzle, not an answer.
 /// </summary>
-public partial class BranchesWindow : Window
+public partial class ProjectsPage : System.Windows.Controls.UserControl
 {
     private readonly IBranchHost _host;
+    private readonly IDrawerHost _drawer;
 
     private GitProject? _project;
     private ProjectSnapshot? _snapshot;
@@ -141,12 +173,39 @@ public partial class BranchesWindow : Window
     /// <summary>Which summary chip is pressed, or null for everything.</summary>
     private BranchGroup? _view;
 
+    /// <summary>The first time the page is shown it reads; after that it keeps what it has.</summary>
+    private bool _started;
+
+    /// <summary>The page has been laid out once, so the timeline's starting state has been chosen.</summary>
+    private bool _sized;
+
+    private bool _timelineOn = true;
+
+    /// <summary>Where the timeline column was last dragged to, for when it comes back.</summary>
+    private GridLength _timelineWidth = new(360);
+
+    /// <summary>The right-hand pane has room to put Deployed beside Diagrams.</summary>
+    private bool _roomy = true;
+
+    private bool _repoWide = true;
+
+    /// <summary>The page is this wide or wider the first time it is laid out: the timeline starts open.</summary>
+    private const double TimelineOnFrom = 1240;
+
+    /// <summary>Below this pane width Diagrams drop under Deployed.</summary>
+    private const double SideBySideFrom = 720;
+
+    /// <summary>What the branches keep beside an open timeline, while the page can afford it.</summary>
+    private const double BranchesFloor = 340;
+
     /// <summary>
     /// How the branches are grouped, in the order the groups appear.
     ///
-    /// The order is the order of the question being asked: what is deployed,
-    /// then what hasn't got there, then what half has, then what could not be
-    /// established — and only after all of that, the things that are finished.
+    /// The order is the order of the question being asked: what hasn't got
+    /// anywhere, then what half has, then what could not be established, then
+    /// the things that are finished — and the deploy branches themselves last.
+    /// The Deployed band at the top of the page already says what is live, so
+    /// they come after the work measured against them, not before it.
     /// A flat list sorted by date puts a branch that shipped in March directly
     /// above one that has never shipped at all, and reading it is arithmetic.
     /// </summary>
@@ -154,35 +213,42 @@ public partial class BranchesWindow : Window
 
     /// <summary>
     /// The groups, in the order the question is asked — which is not the order
-    /// of the enum, and is the only thing this list decides. What belongs in
-    /// each is <see cref="BranchLine.Group"/>'s business.
+    /// of the enum, and is the only thing this list decides: the deploy branches
+    /// come last, after everything measured against them. The summary chips
+    /// follow the same order. What belongs in each group is
+    /// <see cref="BranchLine.Group"/>'s business.
     /// </summary>
     private static readonly Bucket[] Buckets =
     [
-        new(BranchGroup.Deploy, "DEPLOY BRANCHES", "what everything else is measured against", Tone.Deploy),
         new(BranchGroup.Open, "NOT SHIPPED ANYWHERE", "hasn't reached any deploy branch", Tone.Open),
         new(BranchGroup.Partly, "PARTLY SHIPPED", "in some environments, not all", Tone.Partly),
         new(BranchGroup.Unknown, "COULDN'T CHECK", "unknown, which is not the same as no", Tone.Unsure),
         new(BranchGroup.Shipped, "SHIPPED EVERYWHERE", "", Tone.Shipped),
         new(BranchGroup.Tidy, "SAFE TO DELETE", "merged everywhere, and the remote is gone", Tone.Tidy),
+        new(BranchGroup.Deploy, "DEPLOY BRANCHES", "what everything above is measured against", Tone.Deploy),
     ];
 
-    public BranchesWindow(IBranchHost host)
+    public ProjectsPage(IBranchHost host, IDrawerHost drawer)
     {
         _host = host;
+        _drawer = drawer;
         InitializeComponent();
 
-        Closed += (_, _) => _reading?.Cancel();
-        Loaded += (_, _) =>
+        // Not on Loaded: that fires for a page nobody has opened, and a git read
+        // every time the main window appears is work for nothing. Later visits
+        // keep what is on screen; F5 and Re-read are there for a fresh look.
+        IsVisibleChanged += (_, e) =>
         {
+            if (_started || !(bool)e.NewValue) return;
+
+            _started = true;
             SortBox.SelectedIndex = 0;
             Start();
         };
-
-        // The three things you do most, without reaching for the mouse. Preview,
-        // so they work while the focus is inside the filter box.
-        PreviewKeyDown += OnShortcut;
     }
+
+    /// <summary>Stop any read still running. The main window calls this as it closes.</summary>
+    public void Stop() => _reading?.Cancel();
 
     private void Start() => Reload(null);
 
@@ -209,6 +275,7 @@ public partial class BranchesWindow : Window
 
             PaintProjects();
             PaintAll();
+            PaintDiagrams();
             Busy(null);
             return;
         }
@@ -220,14 +287,6 @@ public partial class BranchesWindow : Window
         Select(pick, force: true);
     }
 
-    /// <summary>Show it, or bring it forward if it's already up.</summary>
-    public void Summon()
-    {
-        Show();
-        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
-        Activate();
-    }
-
     // ---------- projects ----------
 
     private void PaintProjects()
@@ -235,34 +294,56 @@ public partial class BranchesWindow : Window
         var rows = new List<object>();
         var bands = ProjectGroups.Arrange(_host.Projects, p => p.Group);
         var folded = _host.Collapsed.ToHashSet(StringComparer.Ordinal);
+        var query = RepoSearch.Text.Trim();
+        var searching = query.Length > 0;
+        var found = 0;
 
         foreach (var band in bands)
         {
+            // A search keeps what matches and drops the groups with nothing in
+            // them. The fold is not touched: it is only ignored while the box has
+            // text, so clearing it brings the list back as it was saved.
+            IReadOnlyList<GitProject> items = searching
+                ? band.Items.Where(p => Matches(p, query)).ToList()
+                : band.Items;
+            if (items.Count == 0) continue;
+
             // Only a named band can be folded. The leftovers are the bottom of
             // the list, and a heading you can hide the whole list behind is a
             // way to end up with an empty rail and no idea why.
-            var shut = band.Named && folded.Contains(band.Key);
+            var shut = !searching && band.Named && folded.Contains(band.Key);
 
-            if (band.Named) rows.Add(Heading(band, shut));
+            if (band.Named) rows.Add(Heading(band, items, shut, searching));
             if (shut) continue;
 
-            foreach (var project in band.Items) rows.Add(Line(project, indented: band.Named));
+            found += items.Count;
+            foreach (var project in items) rows.Add(Line(project, indented: band.Named));
         }
 
         ProjectList.ItemsSource = rows;
+
+        NoMatch.Visibility = searching && found == 0 ? Visibility.Visible : Visibility.Collapsed;
+        NoMatch.Text = searching ? $"No repository matches “{query}”." : string.Empty;
     }
 
-    private GroupBar Heading(ProjectBand<GitProject> band, bool shut)
+    private static bool Matches(GitProject p, string query) =>
+        p.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+        || p.Path.Contains(query, StringComparison.OrdinalIgnoreCase)
+        || p.Group?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+
+    private void OnRepoSearchChanged(object sender, TextChangedEventArgs e) => PaintProjects();
+
+    private GroupBar Heading(ProjectBand<GitProject> band, IReadOnlyList<GitProject> items, bool shut, bool searching)
     {
-        var read = band.Items.Select(_host.Cached).ToList();
+        var read = items.Select(_host.Cached).ToList();
         var broken = read.Any(s => s is { Ok: false });
         var outstanding = read.Sum(s => s is { Ok: true } ? s.Outstanding : 0);
-        var holds = _project is not null && band.Items.Any(p => p.Id == _project.Id);
+        var holds = _project is not null && items.Any(p => p.Id == _project.Id);
 
         return new GroupBar(
             Key: band.Key,
             Title: band.Title,
-            Count: band.Items.Count.ToString(CultureInfo.InvariantCulture),
+            Count: items.Count.ToString(CultureInfo.InvariantCulture),
 
             // Only while the group is shut. Open, you can see how many there are
             // by looking, and the number sat beside the outstanding badge as a
@@ -271,9 +352,11 @@ public partial class BranchesWindow : Window
             CountShown: shut ? Visibility.Visible : Visibility.Collapsed,
             ShutShown: shut ? Visibility.Visible : Visibility.Collapsed,
             OpenShown: shut ? Visibility.Collapsed : Visibility.Visible,
-            Tip: shut
-                ? $"{band.Items.Count} hidden. Click to open this group."
-                : "Click to fold this group away.",
+            Tip: searching
+                ? "Every group stays open while you search."
+                : shut
+                    ? $"{items.Count} hidden. Click to open this group."
+                    : "Click to fold this group away.",
 
             // The roll-up stays on the heading in both states. A group folded
             // shut on something that needs attention, with nothing to say so, is
@@ -281,7 +364,8 @@ public partial class BranchesWindow : Window
             Badge: broken ? "!" : outstanding.ToString(CultureInfo.InvariantCulture),
             BadgeShown: broken || outstanding > 0 ? Visibility.Visible : Visibility.Collapsed,
             Ink: Paint(shut ? Tone.Faint : Tone.Ink2),
-            Mark: Paint(shut && holds ? Tone.Pick : Tone.Sunk),
+            Selected: shut && holds,
+            Bar: shut && holds ? Paint(Tone.Pick) : System.Windows.Media.Brushes.Transparent,
             BadgeBack: Paint(broken ? Tone.BadEdge : Tone.Lift),
             BadgeInk: Paint(broken ? Tone.BadInk : Tone.Ink));
     }
@@ -306,16 +390,15 @@ public partial class BranchesWindow : Window
             BadgeShown: snap is null || (snap.Ok && outstanding == 0) ? Visibility.Collapsed : Visibility.Visible,
 
             // Under a heading it steps in, so the heading reads as covering it
-            // rather than as one more row. Ungrouped rows keep the old inset, so
-            // a rail with no groups in it looks exactly as it did.
-            Indent: indented ? new Thickness(27, 10, 0, 10) : new Thickness(13, 10, 0, 10),
-            Back: Paint(chosen ? Tone.Card : Tone.Rail),
-            Edge: Paint(Tone.Hair),
+            // rather than as one more row. Ungrouped rows line up with the label
+            // above the list.
+            Indent: indented ? new Thickness(27, 7, 0, 7) : new Thickness(12, 7, 0, 7),
 
             // Which row you are on, said with a mark at the edge as well as a
             // slightly lighter fill: on a dark theme, two greys four steps
             // apart is not a signal anybody can rely on.
-            Mark: Paint(chosen ? Tone.Pick : Tone.Rail),
+            Selected: chosen,
+            Bar: chosen ? Paint(Tone.Pick) : System.Windows.Media.Brushes.Transparent,
             BadgeBack: Paint(snap?.Ok == false ? Tone.BadEdge : Tone.Lift),
             BadgeInk: Paint(snap?.Ok == false ? Tone.BadInk : Tone.Ink));
     }
@@ -330,6 +413,10 @@ public partial class BranchesWindow : Window
     private void OnToggleGroup(object sender, RoutedEventArgs e)
     {
         if (Row<GroupBar>(sender) is not { } bar) return;
+
+        // Every group is open while the search box has text, so a fold made now
+        // would be saved without ever being seen.
+        if (RepoSearch.Text.Trim().Length > 0) return;
 
         var folded = _host.Collapsed.ToHashSet(StringComparer.Ordinal);
         if (!folded.Remove(bar.Key)) folded.Add(bar.Key);
@@ -366,11 +453,18 @@ public partial class BranchesWindow : Window
         BranchFilter.Text = string.Empty;
         _quiet = false;
 
+        DiagramProblem(null);
+
         // Whatever was read last time goes up immediately — a window that starts
         // blank for eight seconds while ssh connects reads as broken.
         _snapshot = _host.Cached(project);
         PaintProjects();
         PaintAll();
+
+        // Painted on selection and on save only, not with every reading: a
+        // finished read replacing the chips under an open right-click menu
+        // turns its Edit and Remove into silent no-ops.
+        PaintDiagrams();
 
         Read(fetch: false, force: force || _snapshot is null);
     }
@@ -449,7 +543,7 @@ public partial class BranchesWindow : Window
 
     // ---------- adding and editing ----------
 
-    private void OnAddProject(object sender, RoutedEventArgs e)
+    private async void OnAddProject(object sender, RoutedEventArgs e)
     {
         // Where the last one lived is the best guess at where this one does:
         // repositories arrive in runs, and someone adding their third local
@@ -463,10 +557,10 @@ public partial class BranchesWindow : Window
         // kind of retype that leaves you with "Backend" and "backend".
         draft.Group = _project?.Group ?? string.Empty;
 
-        Edit(draft);
+        await Edit(draft);
     }
 
-    private void OnEditProject(object sender, RoutedEventArgs e)
+    private async void OnEditProject(object sender, RoutedEventArgs e)
     {
         if (_project is not { } project) return;
 
@@ -476,10 +570,10 @@ public partial class BranchesWindow : Window
         var entry = _host.Configured.FirstOrDefault(x => x.ToProject().Id == project.Id);
         if (entry is null) return;
 
-        Edit(ProjectDraft.From(entry));
+        await Edit(ProjectDraft.From(entry));
     }
 
-    private void Edit(ProjectDraft draft)
+    private async Task Edit(ProjectDraft draft)
     {
         var taken = _host.Configured
             .Select(x => x.ToProject())
@@ -487,8 +581,10 @@ public partial class BranchesWindow : Window
             .GroupBy(p => p.Id, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.Ordinal);
 
-        var dialog = new ProjectDialog(_host, draft, taken) { Owner = this };
-        if (dialog.ShowDialog() != true) return;
+        var form = new ProjectForm(_host, draft, taken);
+
+        // False when the drawer was closed on it, or the window went while it was open.
+        if (!await _drawer.OpenAsync(form) || !IsLoaded) return;
 
         var entries = _host.Configured.ToList();
         var at = draft.Replacing is null
@@ -497,11 +593,11 @@ public partial class BranchesWindow : Window
 
         string? wanted = null;
 
-        if (dialog.Removed)
+        if (form.Removed)
         {
             if (at >= 0) entries.RemoveAt(at);
         }
-        else if (dialog.Result is { } saved)
+        else if (form.Result is { } saved)
         {
             // Replaced in place, so correcting a folder doesn't send the row to
             // the bottom of a list you had in a deliberate order.
@@ -513,6 +609,133 @@ public partial class BranchesWindow : Window
 
         _host.SaveProjects(entries);
         Reload(wanted);
+    }
+
+    // ---------- diagrams ----------
+
+    private void PaintDiagrams()
+    {
+        if (_project is not { } project)
+        {
+            DiagramStrip.Visibility = Visibility.Collapsed;
+            ArrangeBand();
+            return;
+        }
+
+        DiagramStrip.Visibility = Visibility.Visible;
+        ArrangeBand();
+
+        var chips = project.Diagrams
+            .Select(d => DiagramLink.Inspect(d.Target).Place is { } place
+                ? new DiagramChip(d.Target ?? place.Target, d.Label,
+                                  place.Kind == DiagramKind.File ? "file" : "link",
+                                  place.Target + "\nRight-click to edit or remove.")
+                : null)
+            .OfType<DiagramChip>()
+            .ToList();
+
+        DiagramList.ItemsSource = chips;
+        DiagramsEmpty.Text = "Nothing linked yet. Use + Add for this project's database diagram, or any other draw.io file.";
+        DiagramsEmpty.Visibility = chips.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void DiagramProblem(string? problem)
+    {
+        DiagramNote.Text = problem ?? string.Empty;
+        DiagramNote.Visibility = problem is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private async void OnOpenDiagram(object sender, RoutedEventArgs e)
+    {
+        if (Row<DiagramChip>(sender) is not { } chip) return;
+
+        var asked = _project?.Id;
+        DiagramProblem(null);
+
+        var problem = await Task.Run(() => DesktopActions.OpenDiagram(chip.Target));
+
+        // Another project may be on screen by now, and its strip is not where this belongs.
+        if (_project?.Id == asked) DiagramProblem(problem);
+    }
+
+    private async void OnAddDiagram(object sender, RoutedEventArgs e)
+    {
+        if (_project is not { } project) return;
+        if (await AskDiagram(project, null) is not { } added) return;
+
+        SaveDiagrams(project, [.. project.Diagrams, added]);
+    }
+
+    private async void OnEditDiagram(object sender, RoutedEventArgs e)
+    {
+        if (_project is not { } project || Row<DiagramChip>(sender) is not { } chip) return;
+
+        var list = project.Diagrams.ToList();
+        var at = list.FindIndex(d => d.Target == chip.Target);
+        if (at < 0)
+        {
+            DiagramProblem("That link has changed since the list was drawn. Try again.");
+            PaintDiagrams();
+            return;
+        }
+
+        if (await AskDiagram(project, list[at]) is not { } changed) return;
+
+        list[at] = changed;
+        SaveDiagrams(project, list);
+    }
+
+    private void OnRemoveDiagram(object sender, RoutedEventArgs e)
+    {
+        if (_project is not { } project || Row<DiagramChip>(sender) is not { } chip) return;
+
+        var sure = Ask(
+            $"Remove the link to “{chip.Title}”?\n\nOnly the link goes — the diagram itself is not touched.",
+            "Remove diagram",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Question,
+            MessageBoxResult.Cancel);
+
+        if (sure != MessageBoxResult.OK) return;
+
+        SaveDiagrams(project, project.Diagrams.Where(d => d.Target != chip.Target));
+    }
+
+    private async Task<DiagramLink?> AskDiagram(GitProject project, DiagramLink? editing)
+    {
+        var taken = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var link in project.Diagrams)
+        {
+            if (ReferenceEquals(link, editing) || DiagramLink.Inspect(link.Target).Place is not { } place) continue;
+            taken.TryAdd(DiagramLink.Key(place), link.Label);
+        }
+
+        var form = new DiagramForm(editing, taken);
+
+        // Null when the drawer was closed on it, or the window went while it was open.
+        return await _drawer.OpenAsync(form) && IsLoaded ? form.Result : null;
+    }
+
+    private void SaveDiagrams(GitProject project, IEnumerable<DiagramLink> diagrams)
+    {
+        var entries = _host.Configured.ToList();
+        var at = entries.FindIndex(x => x.ToProject().Id == project.Id);
+        if (at < 0)
+        {
+            DiagramProblem("This repository is no longer in the list, so the change wasn't saved.");
+            return;
+        }
+
+        entries[at] = entries[at].WithDiagrams(diagrams);
+
+        // Only the links changed, so there is no re-read: going back to git, or
+        // over ssh, to draw one more chip would put the window into "Reading…"
+        // for nothing.
+        _project = _host.SaveProjects(entries).FirstOrDefault(p => p.Id == project.Id) ?? project;
+
+        DiagramProblem(null);
+        PaintDiagrams();
     }
 
     private void OnReRead(object sender, RoutedEventArgs e) => Read(fetch: false, force: true);
@@ -539,7 +762,7 @@ public partial class BranchesWindow : Window
 
             HeadTitle.Text = none ? "No repositories yet" : "Branches";
             HeadDetail.Text = none
-                ? "Add the ones you ship from, and this window can tell you what has reached them."
+                ? "Add the ones you ship from, and this page can tell you what has reached them."
                 : string.Empty;
 
             // Both cards belong to a project. Leaving the last one's failure up
@@ -576,13 +799,15 @@ public partial class BranchesWindow : Window
         {
             TargetList.ItemsSource = null;
 
-            // No deploy branches means no reference, and an empty band with a
+            // No deploy branches means no reference, and an empty section with a
             // heading over it is just a thing to wonder about.
             DeployedStrip.Visibility = Visibility.Collapsed;
+            ArrangeBand();
             return;
         }
 
         DeployedStrip.Visibility = Visibility.Visible;
+        ArrangeBand();
 
         // The branch the counts are measured against leads, so the card order and
         // the arrows on every row below agree with each other.
@@ -727,9 +952,9 @@ public partial class BranchesWindow : Window
     }
 
     /// <summary>
-    /// In the order the question is asked: what is deployed, then what hasn't
-    /// got there, then what half has, then what couldn't be established — and
-    /// only after all of that, the things that are finished.
+    /// In the order of <see cref="Buckets"/>: what hasn't got anywhere, what half
+    /// has, what couldn't be established, the things that are finished — and the
+    /// deploy branches last.
     /// </summary>
     private List<object> Grouped(IReadOnlyList<BranchLine> branches)
     {
@@ -771,8 +996,14 @@ public partial class BranchesWindow : Window
             _ => [.. branches.OrderByDescending(b => b.Updated)],
         };
 
-    /// <summary>Ctrl+F to the filter, Esc to clear it, F5 to read again.</summary>
-    private void OnShortcut(object sender, System.Windows.Input.KeyEventArgs e)
+    /// <summary>
+    /// Ctrl+F to the filter, Esc to clear it, F5 to read again.
+    ///
+    /// The three things you do most, without reaching for the mouse. The main
+    /// window passes every key here, ahead of the controls, while this page is
+    /// showing — so they work with the focus in the filter box, or in the nav.
+    /// </summary>
+    internal void OnShortcut(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key == System.Windows.Input.Key.F5)
         {
@@ -792,8 +1023,20 @@ public partial class BranchesWindow : Window
 
         if (e.Key != System.Windows.Input.Key.Escape) return;
 
-        // Escape undoes the narrowing, in the order it was most likely applied —
-        // and only closes the window once there is nothing left to widen.
+        // In the repository search, Escape is the search's own.
+        if (RepoSearch.IsKeyboardFocused)
+        {
+            if (RepoSearch.Text.Length > 0)
+            {
+                RepoSearch.Clear();
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        // Escape undoes the narrowing, in the order it was most likely applied.
+        // It never closes anything: the window is not this page's to close.
         if (BranchFilter.Text.Length > 0)
         {
             BranchFilter.Text = string.Empty;
@@ -887,7 +1130,8 @@ public partial class BranchesWindow : Window
             TargetShown: branch.IsTarget ? Visibility.Visible : Visibility.Collapsed,
             SideLabel: branch.SafeToDelete ? "merged · safe to delete" : side,
             SideShown: branch.SafeToDelete || side.Length > 0 ? Visibility.Visible : Visibility.Collapsed,
-            Pills: pills);
+            Pills: pills,
+            Traced: new TraceMark(branch.Name == _tracing));
     }
 
     private void OnFilterChanged(object sender, RoutedEventArgs e)
@@ -900,13 +1144,26 @@ public partial class BranchesWindow : Window
     {
         if (Row<BranchRow>(sender) is not { } row) return;
 
-        _tracing = row.Name;
-        PaintTimeline();
+        Trace(row.Name);
+
+        // What is traced shows in the timeline, so the timeline has to be there.
+        ShowTimeline(true);
     }
 
-    private void OnClearTrace(object sender, RoutedEventArgs e)
+    private void OnClearTrace(object sender, RoutedEventArgs e) => Trace(null);
+
+    /// <summary>
+    /// Filter the timeline to one branch, or back to all of them. The rows are
+    /// marked where they stand and not repainted, which would take the focus off
+    /// the button that was just pressed.
+    /// </summary>
+    private void Trace(string? name)
     {
-        _tracing = null;
+        _tracing = name;
+
+        foreach (var row in BranchList.Items.OfType<BranchRow>())
+            row.Traced.On = name is not null && row.Name == name;
+
         PaintTimeline();
     }
 
@@ -991,7 +1248,141 @@ public partial class BranchesWindow : Window
             : $"No merge commits on {_timelineTarget} in the last year.";
     }
 
+    // ---------- layout ----------
+
+    /// <summary>
+    /// The repository pane narrows with the page, at the same width and to the
+    /// same sizes as the lists pane on the Notes page. The first measure also
+    /// decides whether the timeline starts open; after that it is the user's.
+    /// </summary>
+    private void OnPageSized(object sender, SizeChangedEventArgs e)
+    {
+        var wide = e.NewSize.Width >= MainWindow.NotesListsWide;
+        if (wide != _repoWide)
+        {
+            _repoWide = wide;
+            RepoColumn.Width = new GridLength(wide ? 240 : 180);
+        }
+
+        // Not before the page has a width: it is never measured while hidden.
+        if (_sized || e.NewSize.Width <= 0) return;
+
+        _sized = true;
+        ShowTimeline(e.NewSize.Width >= TimelineOnFrom);
+    }
+
+    /// <summary>
+    /// Deployed and Diagrams side by side while the pane has room, one under the
+    /// other when it has not, and the sort and filter follow them down. Only on
+    /// crossing the line, so dragging the window edge across it is one re-layout.
+    /// </summary>
+    private void OnRightSized(object sender, SizeChangedEventArgs e)
+    {
+        var roomy = e.NewSize.Width >= SideBySideFrom;
+        if (roomy == _roomy) return;
+
+        _roomy = roomy;
+        ArrangeBand();
+        ArrangeToolbar();
+    }
+
+    private void ArrangeBand()
+    {
+        var deployed = DeployedStrip.Visibility == Visibility.Visible;
+        var diagrams = DiagramStrip.Visibility == Visibility.Visible;
+        var both = deployed && diagrams;
+        var beside = both && _roomy;
+
+        // With neither section there is nothing to put a band round.
+        Band.Visibility = deployed || diagrams ? Visibility.Visible : Visibility.Collapsed;
+        BandDivider.Visibility = both ? Visibility.Visible : Visibility.Collapsed;
+
+        Grid.SetColumnSpan(DeployedStrip, beside ? 1 : 3);
+
+        Grid.SetRow(BandDivider, beside ? 0 : 1);
+        Grid.SetColumn(BandDivider, beside ? 1 : 0);
+        Grid.SetColumnSpan(BandDivider, beside ? 1 : 3);
+        BandDivider.Width = beside ? 1 : double.NaN;
+        BandDivider.Height = beside ? double.NaN : 1;
+        BandDivider.Margin = beside ? new Thickness(16, 0, 16, 8) : new Thickness(0, 4, 0, 12);
+
+        Grid.SetRow(DiagramStrip, beside ? 0 : 2);
+        Grid.SetColumn(DiagramStrip, beside ? 2 : 0);
+        Grid.SetColumnSpan(DiagramStrip, beside ? 1 : 3);
+        DiagramStrip.MaxWidth = beside ? 360 : 560;
+    }
+
+    private void ArrangeToolbar()
+    {
+        Grid.SetRow(ToolbarTools, _roomy ? 0 : 1);
+        Grid.SetColumn(ToolbarTools, _roomy ? 1 : 0);
+        Grid.SetColumnSpan(ToolbarTools, _roomy ? 1 : 2);
+        ToolbarTools.HorizontalAlignment = _roomy ? System.Windows.HorizontalAlignment.Right : System.Windows.HorizontalAlignment.Left;
+        ToolbarTools.Margin = _roomy ? new Thickness(0) : new Thickness(0, 8, 0, 0);
+        BranchFilter.Width = _roomy ? 200 : 150;
+        Grid.SetRow(SummaryChips, _roomy ? 1 : 2);
+    }
+
+    private void OnSplitSized(object sender, SizeChangedEventArgs e) => FitTimeline(e.NewSize.Width);
+
+    /// <summary>
+    /// A pixel column never gives way on its own, so a timeline opened on a narrow
+    /// page — by the switch or by Trace — would run off the right edge. Cap it to
+    /// what is left beside the branches, and let both shrink when even that is short.
+    /// </summary>
+    private void FitTimeline(double width)
+    {
+        if (width <= 0) return;
+
+        var branches = Math.Min(BranchesFloor, width * 0.55);
+        var room = Math.Max(0, width - branches - 6);
+
+        BranchesColumn.MinWidth = branches;
+        TimelineColumn.MaxWidth = room;
+        TimelineColumn.MinWidth = _timelineOn ? Math.Min(260, room) : 0;
+    }
+
+    private void OnTimelineToggle(object sender, RoutedEventArgs e) =>
+        ShowTimeline(TimelineToggle.IsChecked == true);
+
+    /// <summary>
+    /// The column goes to nothing rather than just being hidden, so the branches
+    /// take its room; it comes back at the width it was dragged to.
+    /// </summary>
+    private void ShowTimeline(bool on)
+    {
+        TimelineToggle.IsChecked = on;
+        if (on == _timelineOn) return;
+
+        _timelineOn = on;
+
+        if (on)
+        {
+            TimelineColumn.Width = _timelineWidth;
+            SplitColumn.Width = new GridLength(6);
+        }
+        else
+        {
+            _timelineWidth = TimelineColumn.Width;
+            TimelineColumn.MinWidth = 0;
+            TimelineColumn.Width = new GridLength(0);
+            SplitColumn.Width = new GridLength(0);
+        }
+
+        TimelinePane.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        Splitter.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+
+        if (on) FitTimeline(BranchesColumn.ActualWidth + SplitColumn.ActualWidth + TimelineColumn.ActualWidth);
+    }
+
     // ---------- plumbing ----------
+
+    /// <summary>A question for the user, put to the main window's owner when there is one.</summary>
+    private MessageBoxResult Ask(string text, string caption, MessageBoxButton buttons,
+                                 MessageBoxImage image, MessageBoxResult otherwise) =>
+        Window.GetWindow(this) is { } owner
+            ? MessageBox.Show(owner, text, caption, buttons, image, otherwise)
+            : MessageBox.Show(text, caption, buttons, image, otherwise);
 
     private static string Tail(string path)
     {

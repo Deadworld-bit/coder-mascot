@@ -36,13 +36,16 @@ public static class ProjectGroups
     public const int MaxLength = 32;
 
     /// <summary>The name as it will be stored and shown, or null for no group.</summary>
-    public static string? Clean(string? raw)
+    public static string? Clean(string? raw) => OneLine(raw, MaxLength);
+
+    /// <summary>Typed text made fit for one line of a settings file and a label, or null when blank.</summary>
+    public static string? OneLine(string? raw, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
 
-        // A group name is written to a settings file and drawn into a heading.
-        // A stray newline or tab in it would break both, so whitespace of every
-        // kind collapses to one plain space and control characters are dropped.
+        // Written to a settings file and drawn into a heading. A stray newline
+        // or tab would break both, so whitespace of every kind collapses to one
+        // plain space and control characters are dropped.
         var text = new System.Text.StringBuilder(raw.Length);
         var space = false;
 
@@ -58,7 +61,7 @@ public static class ProjectGroups
         var name = text.ToString();
         if (name.Length == 0) return null;
 
-        return name.Length <= MaxLength ? name : name[..MaxLength].TrimEnd();
+        return name.Length <= maxLength ? name : name[..maxLength].TrimEnd();
     }
 
     /// <summary>

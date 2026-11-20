@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Plain net8.0 so the log reading runs on Linux. The config round trip pulls
+       in CoderConfig and what it references, hence the list. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>CoderMascot.LogTests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Core/LogModel.cs" />
+    <Compile Include="../../Core/LogParse.cs" />
+    <Compile Include="../../Core/LogFile.cs" />
+    <Compile Include="../../Core/LogSource.cs" />
+    <Compile Include="../../Core/LogMonitor.cs" />
+    <Compile Include="../../Core/LogTable.cs" />
+    <Compile Include="../../Core/LogSql.cs" />
+    <Compile Include="../../Core/MongoLogReader.cs" />
+    <Compile Include="../../Core/LogSecrets.cs" />
+    <Compile Include="../../Core/CrashLog.cs" />
+    <Compile Include="../../Core/CoderConfig.cs" />
+    <Compile Include="../../Core/AlertGate.cs" />
+    <Compile Include="../../Core/Character.cs" />
+    <Compile Include="../../Core/Pose.cs" />
+    <Compile Include="../../Core/Perimeter.cs" />
+    <Compile Include="../../Core/Hotkey.cs" />
+    <Compile Include="../../Core/GitModel.cs" />
+    <Compile Include="../../Core/ProjectDraft.cs" />
+    <Compile Include="../../Core/ProjectGroup.cs" />
+    <Compile Include="../../Core/GitUrl.cs" />
+    <Compile Include="../../Core/GitSignIn.cs" />
+    <Compile Include="../../Core/SessionLine.cs" />
+    <Compile Include="../../Core/MascotState.cs" />
+    <Compile Include="../../Core/CiModel.cs" />
+    <Compile Include="../../Core/CiRemote.cs" />
+    <Compile Include="../../Core/CiParse.cs" />
+    <Compile Include="../../Core/CiWatch.cs" />
+    <Compile Include="../../Core/DiagramLink.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+
+  <!-- For the MongoDB filters, which are rendered and checked without a server. -->
+  <ItemGroup>
+    <PackageReference Include="MongoDB.Driver" Version="3.11.1" />
+  </ItemGroup>
+
+</Project>

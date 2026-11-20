@@ -29,6 +29,9 @@
     <SolidColorBrush x:Key="Line" Color="#334155" />
     <SolidColorBrush x:Key="Edge" Color="#475569" />
 
+    <!-- the dim a drawer lays over the window behind it -->
+    <SolidColorBrush x:Key="Scrim" Color="#99020617" />
+
     <!-- text -->
     <SolidColorBrush x:Key="Ink"   Color="#E2E8F0" />
     <SolidColorBrush x:Key="Ink2"  Color="#CBD5E1" />

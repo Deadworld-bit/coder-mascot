@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The table readers against real servers. Run by the owner on the PC, never in the
+       workspace (docs/PLAN-LOG-SOURCES.md, D8/D23). It creates and drops its own
+       tables and collections, so it refuses to start without LOGTEST_SCRATCH=yes. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>CoderMascot.LogDbTests</RootNamespace>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
+    <PackageReference Include="MongoDB.Driver" Version="3.11.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Core/LogModel.cs" />
+    <Compile Include="../../Core/LogParse.cs" />
+    <Compile Include="../../Core/LogSource.cs" />
+    <Compile Include="../../Core/LogTable.cs" />
+    <Compile Include="../../Core/LogSql.cs" />
+    <Compile Include="../../Core/LogSecrets.cs" />
+    <Compile Include="../../Core/SqlLogReader.cs" />
+    <Compile Include="../../Core/MongoLogReader.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+
+</Project>

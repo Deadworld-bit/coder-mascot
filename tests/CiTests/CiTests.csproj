@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Focused runner for the reconstructed CI / branch-deploy logic. Targets
+       plain net8.0 so it runs on Linux. The full ConfigTests project can't
+       compile until BranchView/WorkspaceView/INoteCipher are also restored, so
+       this pulls only what the CI + BranchDiff assertions need. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>CoderMascot.CiTests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Core/GitModel.cs" />
+    <Compile Include="../../Core/ProjectDraft.cs" />
+    <Compile Include="../../Core/ProjectGroup.cs" />
+    <Compile Include="../../Core/DiagramLink.cs" />
+    <Compile Include="../../Core/GitUrl.cs" />
+    <Compile Include="../../Core/GitSignIn.cs" />
+    <Compile Include="../../Core/SessionLine.cs" />
+    <Compile Include="../../Core/MascotState.cs" />
+    <Compile Include="../../Core/CiModel.cs" />
+    <Compile Include="../../Core/CiRemote.cs" />
+    <Compile Include="../../Core/CiParse.cs" />
+    <Compile Include="../../Core/CiWatch.cs" />
+    <Compile Include="../../Core/BranchDiff.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+
+</Project>

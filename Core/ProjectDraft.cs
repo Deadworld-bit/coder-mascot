@@ -32,8 +32,23 @@ public sealed class ProjectDraft
     /// <summary>The heading it is filed under in the rail. Blank is a group too.</summary>
     public string Group { get; set; } = string.Empty;
 
+    /// <summary>How this repository's pipelines are found.</summary>
+    public CiKind Ci { get; set; } = CiKind.Auto;
+
+    /// <summary>The CI server, when it must be given. Blank means "read it from the remote".</summary>
+    public string CiUrl { get; set; } = string.Empty;
+
+    /// <summary>The project path on that server, when it must be given.</summary>
+    public string CiProject { get; set; } = string.Empty;
+
     /// <summary>In order. The first is what counts are measured against.</summary>
     public List<DeployDraft> Deploys { get; } = [];
+
+    /// <summary>
+    /// Not edited here: carried through so that saving the repository keeps
+    /// the diagrams linked to it from the Branches window.
+    /// </summary>
+    public List<DiagramLink> Diagrams { get; } = [];
 
     /// <summary>
     /// Identity of the entry this is replacing, or null when it is a new one.
@@ -59,7 +74,12 @@ public sealed class ProjectDraft
             Path = entry.Path ?? string.Empty,
             Host = project.Host,
             Group = entry.Group ?? string.Empty,
+            Ci = project.Ci,
+            CiUrl = project.CiUrl ?? string.Empty,
+            CiProject = project.CiProject ?? string.Empty,
         };
+
+        draft.Diagrams.AddRange(project.Diagrams);
 
         // Primary first, then the rest in the order the file had them, so the
         // list on screen reads the same way twice running.
@@ -100,6 +120,17 @@ public sealed class ProjectDraft
         // Tidy() runs Clean over it, so a heading typed with a stray tab or
         // forty words in it cannot reach the file or the rail.
         Group = Group,
+
+        Ci = Ci switch
+        {
+            CiKind.GitLab => "gitlab",
+            CiKind.GitHub => "github",
+            CiKind.Off => "off",
+            _ => null,   // auto is the default, never written
+        },
+        CiUrl = string.IsNullOrWhiteSpace(CiUrl) ? null : CiUrl,
+        CiProject = string.IsNullOrWhiteSpace(CiProject) ? null : CiProject,
+        Diagrams = [.. Diagrams],
     }.Tidy();
 
     /// <summary>Why this can't be saved yet, or null when it can.</summary>
@@ -144,6 +175,16 @@ public sealed class ProjectDraft
         ? "No deploy branches yet, so this repository can list its branches but can't say what has shipped. "
           + "Add the branch your CI deploys from."
         : null;
+
+    /// <summary>
+    /// Why the CI server can't be saved, or null. A server a token must never be
+    /// sent to — anything but https — blocks the save; blank is fine, since it
+    /// means "read the server from the remote".
+    /// </summary>
+    public string? CiProblem =>
+        string.IsNullOrWhiteSpace(CiUrl) || CiRemote.CleanServer(CiUrl) is not null
+            ? null
+            : "That CI server can't be used. Give an https address, or leave it blank to read it from the remote.";
 
     /// <summary>Add a deploy branch. False when it is blank or already listed.</summary>
     public bool Add(string? branch, string? environment)

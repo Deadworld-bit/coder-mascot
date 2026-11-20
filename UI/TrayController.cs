@@ -15,134 +15,47 @@ namespace CoderMascot.UI;
 public sealed class TrayController : IDisposable
 {
     private readonly NotifyIcon _icon;
-    private readonly IReadOnlyList<MascotWindow> _mascots;
-    private readonly ToolStripMenuItem _clickThroughItem;
-    private readonly ToolStripMenuItem _dismissItem;
-    private readonly Dictionary<AlertPolicy, ToolStripMenuItem> _alertItems = new();
+    private readonly ContextMenuStrip _menu;
+    private readonly Func<MenuState> _menuState;
+    private readonly TrayMenuRenderer _renderer = new();
+    private readonly Font _font;
+    private readonly Font _bold;
     private Icon? _current;
     private IntPtr _currentHandle;
 
     /// <summary>Last state we actually drew, so icons aren't rebuilt every poll.</summary>
     private MascotState _rendered = (MascotState)(-1);
 
-    public event EventHandler? CheckRequested;
-
-    /// <summary>Raised when a character is shown or hidden from the tray menu.</summary>
-    public event EventHandler<(MascotWindow Mascot, bool Visible)>? VisibilityToggled;
-
-    /// <summary>"I know about this one" — the same thing clicking the mascot does.</summary>
-    public event EventHandler? Acknowledged;
-
-    /// <summary>A new noise level was picked from the tray menu.</summary>
-    public event EventHandler<AlertPolicy>? AlertPolicyChanged;
-
-    /// <summary>Open the detail window.</summary>
-    public event EventHandler? DashboardRequested;
-
-    /// <summary>Write something down — the detail window, on the notes.</summary>
-    public event EventHandler? NoteRequested;
-
-    /// <summary>Connect this app to a Coder deployment.</summary>
-    public event EventHandler? SetupRequested;
-
-    /// <summary>Where work has got to, across the watched repositories.</summary>
-    public event EventHandler? BranchesRequested;
+    /// <summary>A line of the menu was chosen, or the icon was double-clicked.</summary>
+    public event EventHandler<MenuEntry>? MenuChosen;
 
     /// <summary>
     /// One tray icon for the whole app, however many characters are on screen.
     ///
     /// The icon reports the workspace, and there is only one workspace — two
-    /// icons showing the same colour would just be two things to explain. What
-    /// is per-character is visibility, so that gets an entry each.
+    /// icons showing the same colour would just be two things to explain. The
+    /// menu is the same list the mascot's right-click menu shows, built from the
+    /// same state each time it opens.
     /// </summary>
-    public TrayController(IReadOnlyList<MascotWindow> mascots)
+    public TrayController(Func<MenuState> menuState)
     {
-        _mascots = mascots;
+        _menuState = menuState;
 
-        var showItems = new List<ToolStripItem>();
-        foreach (var mascot in mascots)
+        // 9.75pt is the 13px the WPF menu uses, and SemiBold matches its bold row.
+        _font = new Font("Segoe UI", 9.75f);
+        _bold = new Font("Segoe UI Semibold", 9.75f);
+
+        _menu = new ContextMenuStrip();
+        Dress(_menu);
+
+        // WinForms decides to cancel an empty strip before Opening runs, so it is
+        // filled now and never empty; the refill on Opening keeps it current.
+        Fill();
+        _menu.Opening += (_, e) =>
         {
-            var label = mascots.Count == 1 ? "Show mascot" : $"Show {mascot.Character.Display}";
-            var item = new ToolStripMenuItem(label) { Checked = true, CheckOnClick = true };
-            item.Click += (_, _) =>
-            {
-                mascot.Visibility = item.Checked
-                    ? System.Windows.Visibility.Visible
-                    : System.Windows.Visibility.Hidden;
-
-                // AllowsTransparency forces software rendering, so looping
-                // storyboards behind a hidden window burn CPU for nothing.
-                mascot.SetAnimating(item.Checked);
-                VisibilityToggled?.Invoke(this, (mascot, item.Checked));
-            };
-            showItems.Add(item);
-        }
-
-        _clickThroughItem = new ToolStripMenuItem("Click-through") { CheckOnClick = true };
-        _clickThroughItem.Click += (_, _) =>
-        {
-            foreach (var m in _mascots) m.SetClickThrough(_clickThroughItem.Checked);
+            Fill();
+            e.Cancel = _menu.Items.Count == 0;
         };
-
-        var dashboardItem = new ToolStripMenuItem("Dashboard…")
-        {
-            Font = new Font(SystemFonts.MenuFont ?? SystemFonts.DefaultFont, FontStyle.Bold),
-        };
-        dashboardItem.Click += (_, _) => DashboardRequested?.Invoke(this, EventArgs.Empty);
-
-        var noteItem = new ToolStripMenuItem("New sticky note");
-        noteItem.Click += (_, _) => NoteRequested?.Invoke(this, EventArgs.Empty);
-
-        var checkItem = new ToolStripMenuItem("Check now");
-        checkItem.Click += (_, _) => CheckRequested?.Invoke(this, EventArgs.Empty);
-
-        var branchesItem = new ToolStripMenuItem("Branches…");
-        branchesItem.Click += (_, _) => BranchesRequested?.Invoke(this, EventArgs.Empty);
-
-        var setupItem = new ToolStripMenuItem("Connect to Coder…");
-        setupItem.Click += (_, _) => SetupRequested?.Invoke(this, EventArgs.Empty);
-
-        // The mascot can be hidden, click-through, or off behind a full-screen
-        // app — all states in which poking it is not an option. This is the
-        // route that always exists.
-        _dismissItem = new ToolStripMenuItem("I know about this — stop telling me")
-        {
-            Enabled = false,
-        };
-        _dismissItem.Click += (_, _) => Acknowledged?.Invoke(this, EventArgs.Empty);
-
-        var messagesItem = new ToolStripMenuItem("Messages");
-        foreach (var (policy, label) in new (AlertPolicy, string)[]
-                 {
-                     (AlertPolicy.All, "Show everything"),
-                     (AlertPolicy.Quiet, "Quiet — no pop-ups, still comes to get you"),
-                     (AlertPolicy.Off, "Off — badge colour only"),
-                 })
-        {
-            // CheckOnClick off on purpose: these three are a radio group, and
-            // letting the shell toggle one independently would allow all three
-            // ticked at once, or none.
-            var item = new ToolStripMenuItem(label) { Checked = policy == AlertPolicy.All };
-            item.Click += (_, _) =>
-            {
-                SetAlertPolicy(policy);
-                AlertPolicyChanged?.Invoke(this, policy);
-            };
-            _alertItems[policy] = item;
-            messagesItem.DropDownItems.Add(item);
-        }
-
-        var quitItem = new ToolStripMenuItem("Quit");
-        quitItem.Click += (_, _) => System.Windows.Application.Current.Shutdown();
-
-        var menu = new ContextMenuStrip();
-        menu.Items.AddRange([.. showItems]);
-        menu.Items.AddRange(new ToolStripItem[]
-        {
-            dashboardItem, branchesItem, noteItem, _clickThroughItem, checkItem,
-            new ToolStripSeparator(), _dismissItem, messagesItem, setupItem,
-            new ToolStripSeparator(), quitItem,
-        });
 
         (_current, _currentHandle) = MakeIcon(Color.FromArgb(100, 116, 139));
         _icon = new NotifyIcon
@@ -150,9 +63,70 @@ public sealed class TrayController : IDisposable
             Icon = _current,
             Visible = true,
             Text = "Coder Mascot — starting…",
-            ContextMenuStrip = menu,
+            ContextMenuStrip = _menu,
         };
-        _icon.DoubleClick += (_, _) => DashboardRequested?.Invoke(this, EventArgs.Empty);
+        _icon.DoubleClick += (_, _) => MenuChosen?.Invoke(this, MenuEntry.OpenMain);
+
+        // The strip is placed by its size before Opening; refilling on the
+        // button going down means a row that came or went is already counted.
+        _icon.MouseDown += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Right) Fill();
+        };
+    }
+
+    /// <summary>Rebuilt each time it is about to open, so it can't disagree with the mascot's.</summary>
+    private void Fill()
+    {
+        var old = _menu.Items.Cast<ToolStripItem>().ToList();
+        _menu.Items.Clear();
+
+        foreach (var entry in AppMenu.Build(_menuState())) _menu.Items.Add(ItemFor(entry));
+
+        foreach (var item in old) item.Dispose();
+    }
+
+    private ToolStripItem ItemFor(MenuEntry entry)
+    {
+        if (entry.IsSeparator) return new ToolStripSeparator();
+
+        // "&" marks a mnemonic in the text, and workspace, file and repository
+        // names can hold one.
+        var item = new ToolStripMenuItem(entry.Header.Replace("&", "&&"))
+        {
+            Enabled = entry.Enabled,
+        };
+        item.Padding = new Padding(item.Padding.Left, 4, item.Padding.Right, 4);
+
+        if (entry.Bold) item.Font = _bold;
+        if (entry.Tip is { } tip) item.ToolTipText = tip;
+
+        // CheckOnClick stays off: the checks belong to the state the menu was
+        // built from, and the shell toggling one by itself would put them out of
+        // step with it.
+        if (entry.Checked is { } on) item.Checked = on;
+
+        if (entry.Items.Count > 0)
+        {
+            Dress(item.DropDown);
+            foreach (var child in entry.Items) item.DropDownItems.Add(ItemFor(child));
+        }
+        else if (entry.Command != MenuCommand.None)
+        {
+            item.Click += (_, _) => MenuChosen?.Invoke(this, entry);
+        }
+
+        return item;
+    }
+
+    /// <summary>The strip and every submenu under it draw the same way.</summary>
+    private void Dress(ToolStripDropDown drop)
+    {
+        drop.Renderer = _renderer;
+        drop.Font = _font;
+        drop.BackColor = _renderer.Back;
+        drop.ForeColor = _renderer.Ink;
+        drop.ShowItemToolTips = true;
     }
 
     public void Render(WorkspaceSnapshot snap, bool notify)
@@ -171,6 +145,8 @@ public sealed class TrayController : IDisposable
                 MascotState.SessionStalled    => Color.FromArgb(251, 146, 60),
                 MascotState.ResourcesHigh     => Color.FromArgb(234, 179, 8),
                 MascotState.Leftovers         => Color.FromArgb(45, 212, 191),
+                MascotState.PipelineFailed    => Color.FromArgb(249, 115, 98),
+
                 MascotState.Unreachable   => Color.FromArgb(249, 115, 22),
                 MascotState.Unauthorized  => Color.FromArgb(167, 139, 250),
                 MascotState.AgentLost     => Color.FromArgb(239, 68, 68),
@@ -186,8 +162,6 @@ public sealed class TrayController : IDisposable
         var tip = $"{snap.State.Title()} — {snap.Detail}";
         _icon.Text = tip.Length > 62 ? tip[..62] : tip;
 
-        _clickThroughItem.Checked = _mascots.Count > 0 && _mascots[0].IsClickThrough;
-
         if (notify)
         {
             _icon.ShowBalloonTip(
@@ -199,15 +173,6 @@ public sealed class TrayController : IDisposable
                     : ToolTipIcon.Info);
         }
     }
-
-    /// <summary>Tick the noise level that's actually in force.</summary>
-    public void SetAlertPolicy(AlertPolicy policy)
-    {
-        foreach (var (key, item) in _alertItems) item.Checked = key == policy;
-    }
-
-    /// <summary>Is there anything to dismiss right now?</summary>
-    public void SetDismissable(bool on) => _dismissItem.Enabled = on;
 
     /// <summary>
     /// Raise a balloon that isn't tied to a state change — the repeat nudge for
@@ -320,6 +285,9 @@ public sealed class TrayController : IDisposable
     {
         _icon.Visible = false;
         _icon.Dispose();
+        _menu.Dispose();
+        _bold.Dispose();
+        _font.Dispose();
         _current?.Dispose();
         if (_currentHandle != IntPtr.Zero) DestroyIcon(_currentHandle);
     }

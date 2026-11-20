@@ -160,6 +160,38 @@ public static class GitRunners
         return stored.Ok ? null : Trim(stored.Error);
     }
 
+    /// <summary>
+    /// The token git already holds for a host, for reading that host's CI API.
+    ///
+    /// `git credential fill` returns whatever the machine's credential helper has
+    /// for the host — the same secret a fetch uses — so this app never keeps a
+    /// copy of its own. It stays in memory, is used only as a header to that same
+    /// host over https, and is never logged: Capture records arguments, never
+    /// stdin or stdout. Null when there is no helper or nothing stored, and
+    /// GIT_TERMINAL_PROMPT=0 keeps a missing one from hanging on a prompt nobody
+    /// can answer.
+    /// </summary>
+    public static async Task<string?> ReadCiToken(CoderConfig cfg, string site, CancellationToken ct)
+    {
+        if (GitCli.Resolve(cfg) is not { } git) return null;
+        if (!Uri.TryCreate(site, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return null;
+
+        var psi = new ProcessStartInfo(git)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        }.ReadAsUtf8();
+
+        psi.ArgumentList.Add("credential");
+        psi.ArgumentList.Add("fill");
+
+        var filled = await Capture(psi, ct, input: $"protocol=https\nhost={uri.Host}\n\n");
+        return filled.Ok ? GitSignIn.Secret(filled.Text) : null;
+    }
+
     private static string Trim(string text)
     {
         var clean = text.Replace('\n', ' ').Replace('\r', ' ').Trim();

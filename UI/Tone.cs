@@ -155,6 +155,9 @@ public static class Tone
     public const string Loaded = "#FACC15";
     public const string Leftover = "#2DD4BF";
 
+    /// <summary>A deploy pipeline is red. Coral: not the workspace-down reds, since your sessions are fine.</summary>
+    public const string Broken = "#F97362";
+
     /// <summary>Can't be reached — its own hue, so it isn't read as "stalled".</summary>
     public const string Gone = "#FB7185";
 
@@ -178,6 +181,7 @@ public static class Tone
         MascotState.SessionStalled => Stalled,
         MascotState.ResourcesHigh => Loaded,
         MascotState.Leftovers => Leftover,
+        MascotState.PipelineFailed => Broken,
         MascotState.Unreachable => Gone,
         MascotState.Unauthorized => Denied,
         MascotState.AgentLost => Bad,

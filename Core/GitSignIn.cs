@@ -47,6 +47,31 @@ public static class GitSignIn
     private static bool Unsafe(string value) => value.Any(char.IsControl);
 
     /// <summary>
+    /// The password field out of what <c>git credential fill</c> prints, or null.
+    ///
+    /// The output is the same line-based key=value format as the input; only the
+    /// <c>password=</c> line is read, and an empty one counts as none. This is how
+    /// the app reuses whatever credential git already has for a host, so it never
+    /// keeps a copy of its own.
+    /// </summary>
+    public static string? Secret(string? credentialOutput)
+    {
+        if (string.IsNullOrEmpty(credentialOutput)) return null;
+
+        foreach (var line in credentialOutput.Split('\n'))
+        {
+            const string key = "password=";
+            var trimmed = line.TrimEnd('\r');
+            if (!trimmed.StartsWith(key, StringComparison.Ordinal)) continue;
+
+            var value = trimmed[key.Length..];
+            return value.Length == 0 ? null : value;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Is git asking to be told who we are?
     ///
     /// Worth telling apart from every other failure, because it is the one with

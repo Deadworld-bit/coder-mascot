@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -40,12 +39,14 @@ public partial class MascotWindow : Window
     /// <summary>False when no sprite frames were compiled in.</summary>
     private readonly bool _hasSprites;
 
-    public event EventHandler? CheckRequested;
+    /// <summary>
+    /// Patrol stands still (false) while this character's menu is open, and goes
+    /// back to the configured setting (true) when it closes.
+    /// </summary>
     public event EventHandler<bool>? PatrolToggled;
 
     /// <summary>
-    /// "Yes, I've seen it" — a plain left-click on the character, or the menu
-    /// item that does the same thing for a click-through mascot.
+    /// "Yes, I've seen it" — a plain left-click on the character.
     ///
     /// Poking the thing that is waving at you is the most obvious way to tell it
     /// you got the message, and it's the one gesture that needs no menu, no
@@ -53,20 +54,14 @@ public partial class MascotWindow : Window
     /// </summary>
     public event EventHandler? Acknowledged;
 
-    /// <summary>The user picked a new noise level from this character's menu.</summary>
-    public event EventHandler<AlertPolicy>? AlertPolicyChanged;
+    /// <summary>
+    /// A line of the right-click menu was chosen, or the character was
+    /// double-clicked (which stands for "Open Coder Mascot…").
+    /// </summary>
+    public event EventHandler<MenuEntry>? MenuChosen;
 
-    /// <summary>Show me everything — the detail window.</summary>
-    public event EventHandler? DashboardRequested;
-
-    /// <summary>Write something down — the dashboard, with the note box focused.</summary>
-    public event EventHandler? NoteRequested;
-
-    /// <summary>Connect this app to a Coder deployment.</summary>
-    public event EventHandler? SetupRequested;
-
-    /// <summary>Where work has got to, across the watched repositories.</summary>
-    public event EventHandler? BranchesRequested;
+    /// <summary>What the menu is built from; asked each time it is about to open.</summary>
+    public Func<MenuState>? MenuSource { get; set; }
 
     /// <summary>
     /// True when the user is touching the mascot — hovering or dragging — and
@@ -112,14 +107,11 @@ public partial class MascotWindow : Window
         // this the window is blank from Show() until the first poll returns.
         if (_hasSprites) Play("idle");
 
-        MenuPatrol.IsChecked = cfg.Patrol;
-        MenuStartWithWindows.IsChecked = cfg.StartWithWindows && StartupRegistration.IsEnabled();
-
         // Moving the window under an open context menu leaves the menu stranded.
         if (ContextMenu is { } menu)
         {
             menu.Opened += (_, _) => PatrolToggled?.Invoke(this, false);
-            menu.Closed += (_, _) => PatrolToggled?.Invoke(this, MenuPatrol.IsChecked);
+            menu.Closed += (_, _) => PatrolToggled?.Invoke(this, _cfg.Patrol);
         }
 
         Closed += (_, _) => _frameTimer.Stop();
@@ -280,11 +272,6 @@ public partial class MascotWindow : Window
 
         // With patrol off nothing else drives the animation, so pick one here.
         if (!_cfg.Patrol) Play(SpriteSet.ForState(state, Character.Style));
-
-        // MenuItem.Header treats "_" as an access-key marker, and Coder
-        // workspace names routinely contain underscores.
-        var label = (snap.WorkspaceName ?? "workspace").Replace("_", "__");
-        MenuStatus.Header = $"{state.Title()} — {label}";
     }
 
     private static SolidColorBrush Brush(string hex) =>
@@ -403,7 +390,7 @@ public partial class MascotWindow : Window
         // Was the Coder web dashboard. The local one answers more of the
         // questions you double-click a status light to ask — which session is
         // stuck, what's still running — and the web one is one button inside it.
-        DashboardRequested?.Invoke(this, EventArgs.Empty);
+        MenuChosen?.Invoke(this, MenuEntry.OpenMain);
     }
 
     private void RestorePosition()
@@ -442,175 +429,65 @@ public partial class MascotWindow : Window
 
     // ---------- menu ----------
 
-    private void OnCheckNow(object sender, RoutedEventArgs e) =>
-        CheckRequested?.Invoke(this, EventArgs.Empty);
-
     /// <summary>
-    /// Show or hide the "not set up" line.
+    /// Rebuilt from the shared list each time the menu is about to open, so it
+    /// can't disagree with the tray's, and a diagram linked in Projects a moment
+    /// ago is already in it.
     ///
-    /// The session watch needs a workspace-side install, and until that has
-    /// happened it reports nothing at all — which is indistinguishable from
-    /// reporting that all is well. A watchdog is allowed to be quiet; it is not
-    /// allowed to be quiet because nobody plugged it in.
+    /// ContextMenuOpening, not ContextMenu.Opened: it is raised before the popup
+    /// is shown, so the menu is placed at the size it will really have. Filling
+    /// it in Opened would resize a menu that has already been put beside a
+    /// mascot parked on the bottom edge of the screen.
     /// </summary>
-    public void SetSessionWatchMissing(bool missing) =>
-        MenuSessionWatch.Visibility = missing ? Visibility.Visible : Visibility.Collapsed;
-
-    private void OnSessionWatchHelp(object sender, RoutedEventArgs e)
+    private void OnContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        MessageBox.Show(
-            "The mascot can also tell you when a Claude session is waiting for "
-            + "your confirmation, or has stopped making progress.\n\n"
-            + "That part runs inside the workspace and isn't installed yet. "
-            + "In a terminal in your Coder workspace:\n\n"
-            + "    bash ~/workspace/projects/coder-mascot/workspace/install-hooks.sh\n\n"
-            + "Then restart any Claude sessions already running, so they pick up "
-            + "the hooks.",
-            "Coder Mascot — session watch", MessageBoxButton.OK, MessageBoxImage.Information);
+        if (ContextMenu is not { } menu || MenuSource is not { } source) return;
+
+        menu.Items.Clear();
+        foreach (var entry in AppMenu.Build(source())) menu.Items.Add(ItemFor(entry));
     }
 
-    private void OnShowDashboard(object sender, RoutedEventArgs e) =>
-        DashboardRequested?.Invoke(this, EventArgs.Empty);
-
-    private void OnNewNote(object sender, RoutedEventArgs e) =>
-        NoteRequested?.Invoke(this, EventArgs.Empty);
-
-    private void OnShowSetup(object sender, RoutedEventArgs e) =>
-        SetupRequested?.Invoke(this, EventArgs.Empty);
-
-    private void OnShowBranches(object sender, RoutedEventArgs e) =>
-        BranchesRequested?.Invoke(this, EventArgs.Empty);
-
-    private void OnDismiss(object sender, RoutedEventArgs e) =>
-        Acknowledged?.Invoke(this, EventArgs.Empty);
-
-    /// <summary>
-    /// Grey out "I know about this" when there is nothing to know about.
-    ///
-    /// An always-live dismiss button is a button that mostly does nothing, and
-    /// one that does nothing is one you stop believing in.
-    /// </summary>
-    public void SetDismissable(bool on) => MenuDismiss.IsEnabled = on;
-
-    private void OnAlertsAll(object sender, RoutedEventArgs e) => Choose(AlertPolicy.All);
-    private void OnAlertsQuiet(object sender, RoutedEventArgs e) => Choose(AlertPolicy.Quiet);
-    private void OnAlertsOff(object sender, RoutedEventArgs e) => Choose(AlertPolicy.Off);
-
-    private void Choose(AlertPolicy policy)
+    private object ItemFor(MenuEntry entry)
     {
-        SetAlertPolicy(policy);
-        AlertPolicyChanged?.Invoke(this, policy);
-    }
+        if (entry.IsSeparator) return new Separator();
 
-    /// <summary>
-    /// Show which noise level is in force. Three checkable items behaving as one
-    /// radio group: clicking any of them re-checks all three from the winner, so
-    /// clicking the current one can't leave the menu with nothing ticked.
-    /// </summary>
-    public void SetAlertPolicy(AlertPolicy policy)
-    {
-        MenuAlertsAll.IsChecked = policy == AlertPolicy.All;
-        MenuAlertsQuiet.IsChecked = policy == AlertPolicy.Quiet;
-        MenuAlertsOff.IsChecked = policy == AlertPolicy.Off;
-    }
-
-    private void OnTogglePatrol(object sender, RoutedEventArgs e)
-    {
-        _cfg.Patrol = MenuPatrol.IsChecked;
-        _cfg.Save();
-        PatrolToggled?.Invoke(this, MenuPatrol.IsChecked);
-    }
-
-    private void OnOpenDashboard(object sender, RoutedEventArgs e)
-    {
-        // UseShellExecute means "ask the shell what this string means", not
-        // "open a URL" — a config value of \\host\share\payload.exe would be
-        // launched. Only ever hand it a parsed http(s) URI.
-        if (!Uri.TryCreate(_cfg.Url, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
-            return;
-
-        Shell(uri.AbsoluteUri);
-    }
-
-    private void OnEditConfig(object sender, RoutedEventArgs e)
-    {
-        try
+        var item = new MenuItem
         {
-            Directory.CreateDirectory(CoderConfig.Dir);
-            if (!File.Exists(CoderConfig.Path_)) _cfg.Save();
-            Shell(CoderConfig.Path_);
-        }
-        catch (Exception ex)
+            // "_" marks an access key in a header, and workspace, file and
+            // repository names are full of them.
+            Header = entry.Header.Replace("_", "__"),
+            IsEnabled = entry.Enabled,
+        };
+
+        if (entry.Bold) item.FontWeight = FontWeights.SemiBold;
+        if (entry.Tip is { } tip) item.ToolTip = tip;
+
+        if (entry.Checked is { } on)
         {
-            MessageBox.Show($"Could not open config: {ex.Message}",
-                "Coder Mascot", MessageBoxButton.OK, MessageBoxImage.Warning);
+            item.IsCheckable = true;
+            item.IsChecked = on;
         }
+
+        foreach (var child in entry.Items) item.Items.Add(ItemFor(child));
+
+        if (entry.Items.Count == 0 && entry.Command != MenuCommand.None)
+            item.Click += (_, _) => MenuChosen?.Invoke(this, entry);
+
+        return item;
     }
 
-    private void OnToggleClickThrough(object sender, RoutedEventArgs e)
-    {
-        SetClickThrough(MenuClickThrough.IsChecked);
-
-        if (MenuClickThrough.IsChecked)
-        {
-            // Once clicks pass through, the only way back is the tray menu.
-            MessageBox.Show(
-                "The mascot now ignores the mouse. Turn this off from the tray icon menu.",
-                "Coder Mascot", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-    }
+    private bool _clickThrough;
 
     public void SetClickThrough(bool on)
     {
-        MenuClickThrough.IsChecked = on;
+        _clickThrough = on;
         if (_hwnd == IntPtr.Zero) return;
 
         var ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
         SetWindowLong(_hwnd, GWL_EXSTYLE, on ? ex | WS_EX_TRANSPARENT : ex & ~WS_EX_TRANSPARENT);
     }
 
-    public bool IsClickThrough => MenuClickThrough.IsChecked;
-
-    private void OnToggleStartup(object sender, RoutedEventArgs e)
-    {
-        var enable = MenuStartWithWindows.IsChecked;
-
-        if (StartupRegistration.Set(enable) is { } problem)
-        {
-            MenuStartWithWindows.IsChecked = !enable;
-            MessageBox.Show($"Could not change startup setting: {problem}",
-                "Coder Mascot", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        _cfg.StartWithWindows = enable;
-        _cfg.Save();
-
-        StartupChanged?.Invoke(this, enable);
-    }
-
-    /// <summary>Tick the switch without firing it — for a change made elsewhere.</summary>
-    public void SetStartWithWindows(bool on) => MenuStartWithWindows.IsChecked = on;
-
-    /// <summary>The startup setting was changed from this character's menu.</summary>
-    public event EventHandler<bool>? StartupChanged;
-
-    private void OnQuit(object sender, RoutedEventArgs e) =>
-        System.Windows.Application.Current.Shutdown();
-
-    private static void Shell(string target)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Could not open {target}: {ex.Message}",
-                "Coder Mascot", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-    }
+    public bool IsClickThrough => _clickThrough;
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
     private static extern int GetWindowLong(IntPtr hWnd, int nIndex);

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using CoderMascot.Core;
 
 namespace CoderMascot.UI;
 
@@ -171,6 +172,90 @@ public static class DesktopActions
         catch (Exception ex)
         {
             return $"Could not open localhost:{port} — {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Open a linked diagram in draw.io or the browser. Null when it opened,
+    /// otherwise what to tell the user.
+    ///
+    /// Checked again here rather than trusted from the list, because the list
+    /// is a settings file that invites hand edits. Touches the disk, and a
+    /// mapped drive that has gone away can take a while to say so, so call it
+    /// off the UI thread.
+    /// </summary>
+    public static string? OpenDiagram(string? target)
+    {
+        const int noAssociation = 1155;
+
+        var (place, problem) = DiagramLink.Inspect(target);
+        if (place is null) return problem;
+
+        try
+        {
+            var open = place.Target;
+
+            if (place.Kind == DiagramKind.File)
+            {
+                // Inspect read the text as typed; the shell goes by the long
+                // name. An 8.3 short name (PAYLOA~1.DIO) can stand for a file
+                // with another extension, so the expanded path is checked and
+                // is what gets opened.
+                if (DiagramLink.Inspect(Path.GetFullPath(open)).Place is not { Kind: DiagramKind.File } full)
+                    return "That path doesn't lead to a draw.io file.";
+
+                open = full.Target;
+                if (!File.Exists(open))
+                    return $"{open} isn't there. Moved, renamed, or not synced to this PC yet?";
+            }
+
+            Process.Start(new ProcessStartInfo(open) { UseShellExecute = true });
+            return null;
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == noAssociation)
+        {
+            return "Nothing on this PC opens this kind of file yet. For .drawio, install draw.io Desktop, "
+                   + "or pick an app for it in Windows' Default apps.";
+        }
+        catch (Exception ex)
+        {
+            return $"Could not open it — {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Show a log folder in Explorer. Null when it opened, otherwise what to tell
+    /// the user.
+    ///
+    /// Checked again here rather than trusted from the list, which is a settings
+    /// file that invites hand edits, and handed to Explorer by its full path as one
+    /// argument, never as a command line for a shell to read. Touches the disk, and
+    /// a mapped drive that has gone can take a while to say so, so call it off the
+    /// UI thread.
+    /// </summary>
+    public static string? OpenFolder(string folder)
+    {
+        var check = LogSourceRules.Inspect(folder);
+        if (check.Folder is not { } path) return check.Problem;
+
+        try
+        {
+            if (!Directory.Exists(path)) return $"{path} isn't there. Moved, renamed, or not created yet?";
+
+            // By absolute path, like the CLI above: a bare name is looked for in the
+            // current folder before anywhere else.
+            var explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+            if (!File.Exists(explorer)) return "Couldn't find Windows Explorer.";
+
+            var start = new ProcessStartInfo(explorer) { UseShellExecute = false };
+            start.ArgumentList.Add(path);
+
+            using var process = Process.Start(start);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return $"Could not open {path}: {ex.Message}";
         }
     }
 

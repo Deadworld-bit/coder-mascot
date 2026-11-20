@@ -1,37 +1,20 @@
-<Window x:Class="CoderMascot.UI.ProjectDialog"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Repository"
-        Width="660" Height="700"
-        MinWidth="580" MinHeight="520"
-        Background="{StaticResource Page}"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        TextOptions.TextFormattingMode="Display"
-        UseLayoutRounding="True">
+<UserControl x:Class="CoderMascot.UI.ProjectForm"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Window.Resources>
+    <UserControl.Resources>
         <ResourceDictionary>
+            <!-- Merged here, not left to the main window: a control parses its
+                 markup before it has a parent. -->
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/UI/Controls.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
-    </Window.Resources>
+    </UserControl.Resources>
 
     <DockPanel>
-        <!-- header -->
-        <Border DockPanel.Dock="Top" Background="{StaticResource Head}" Padding="22,14"
-                BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
-            <StackPanel>
-                <TextBlock x:Name="HeadTitle" Text="Add a repository" FontSize="15" FontWeight="SemiBold" />
-                <TextBlock x:Name="HeadDetail" Style="{StaticResource Prose}" Margin="0,4,0,0"
-                           Text="Where the checkout is, and which of its branches your CI deploys from." />
-            </StackPanel>
-        </Border>
-
         <!-- footer: the destructive action kept well away from the one you press most -->
-        <Border DockPanel.Dock="Bottom" Background="{StaticResource Head}" Padding="22,14"
-                BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource DrawerFooter}">
             <Grid>
                 <Button x:Name="BtnRemove" Content="Remove this repository" Style="{StaticResource Danger}"
                         HorizontalAlignment="Left" Click="OnRemove" Visibility="Collapsed"
@@ -40,7 +23,7 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <TextBlock x:Name="SaveNote" Style="{StaticResource Prose}" VerticalAlignment="Center"
                                Margin="0,0,12,0" MaxWidth="300" TextTrimming="CharacterEllipsis" />
-                    <Button Content="Cancel" Click="OnCancel" Margin="{StaticResource GapAfter}" IsCancel="True" />
+                    <Button Content="Cancel" Click="OnCancel" Margin="{StaticResource GapAfter}" />
                     <Button x:Name="BtnSave" Content="Save" Style="{StaticResource Primary}"
                             Click="OnSave" IsDefault="True" />
                 </StackPanel>
@@ -321,4 +304,4 @@
             </StackPanel>
         </ScrollViewer>
     </DockPanel>
-</Window>
+</UserControl>

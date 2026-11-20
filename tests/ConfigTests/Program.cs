@@ -2813,7 +2813,7 @@ Reset();
 
 // --- What the branch list shows --------------------------------------------
 //
-// All of this used to live in BranchesWindow, where none of it could be
+// All of this used to live in the Branches window, where none of it could be
 // asserted — the sort order was defined by a ComboBox's SelectedIndex.
 
 {

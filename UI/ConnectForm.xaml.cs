@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using CoderMascot.Core;
 
+using UserControl = System.Windows.Controls.UserControl;
+
 namespace CoderMascot.UI;
 
 /// <summary>
@@ -14,16 +16,28 @@ namespace CoderMascot.UI;
 /// a token before knowing where to send someone for one is how the old README
 /// instructions read, and it is why people gave up at step one.
 /// </summary>
-public partial class SetupWindow : Window
+public partial class ConnectForm : UserControl, IDrawerForm
 {
     private readonly CoderConfig _cfg;
     private IReadOnlyList<string> _workspaces = [];
     private CancellationTokenSource? _probe;
 
+    /// <summary>Finished, or abandoned by the drawer: either way it must not report again.</summary>
+    private bool _closed;
+
     /// <summary>Connected, saved, and ready to poll.</summary>
     public event EventHandler? Connected;
 
-    public SetupWindow(CoderConfig cfg)
+    public string Heading => "Point the mascot at your workspace";
+
+    public string? Subheading =>
+        "Two things: where Coder lives, and a session token so it can ask about your workspace. Nothing is saved until it has been checked.";
+
+    public double PreferredWidth => 480;
+
+    public event EventHandler<bool>? Finished;
+
+    public ConnectForm(CoderConfig cfg)
     {
         _cfg = cfg;
         InitializeComponent();
@@ -33,15 +47,27 @@ public partial class SetupWindow : Window
         // and re-typing something the app already has is busywork.
         UrlBox.Text = cfg.Url ?? cfg.RejectedUrl ?? string.Empty;
 
-        Loaded += (_, _) =>
-        {
-            if (UrlBox.Text.Length == 0) UrlBox.Focus();
-            else TokenBox.Focus();
-        };
-
-        Closed += (_, _) => _probe?.Cancel();
-
         ShowUrlState();
+    }
+
+    public void FocusFirst()
+    {
+        if (UrlBox.Text.Length == 0) UrlBox.Focus();
+        else TokenBox.Focus();
+    }
+
+    public void Abandon()
+    {
+        _closed = true;
+        _probe?.Cancel();
+    }
+
+    private void Finish(bool done)
+    {
+        if (_closed) return;
+
+        Abandon();
+        Finished?.Invoke(this, done);
     }
 
     private void OnUrlChanged(object sender, TextChangedEventArgs e) => ShowUrlState();
@@ -104,7 +130,7 @@ public partial class SetupWindow : Window
         catch (Exception ex)
         {
             // ApplyAsync is written not to throw; if it ever does, the setup
-            // window is the last place that should disappear on the user.
+            // form is the last place that should disappear on the user.
             CrashLog.Write("setup", ex);
             Report(ex.Message, ok: false);
             Busy(false);
@@ -136,9 +162,10 @@ public partial class SetupWindow : Window
 
         Connected?.Invoke(this, EventArgs.Empty);
 
-        // Left on screen just long enough to read, then out of the way.
+        // Left on screen just long enough to read, then out of the way — unless
+        // it was closed in the meantime.
         await Task.Delay(TimeSpan.FromSeconds(1.5));
-        Close();
+        Finish(true);
     }
 
     private string? Chosen() => WorkspaceBox.SelectedItem as string;
@@ -152,7 +179,7 @@ public partial class SetupWindow : Window
         OnConnect(sender, e);
     }
 
-    private void OnLater(object sender, RoutedEventArgs e) => Close();
+    private void OnLater(object sender, RoutedEventArgs e) => Finish(false);
 
     private void Busy(bool busy)
     {

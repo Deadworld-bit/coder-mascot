@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <Compile Include="../../Core/CoderConfig.cs" />
+    <Compile Include="../../Core/LogSource.cs" />
     <Compile Include="../../Core/Character.cs" />
     <Compile Include="../../Core/LoadWatch.cs" />
     <Compile Include="../../Core/Reminder.cs" />
@@ -41,6 +42,7 @@
     <Compile Include="../../Core/GitParse.cs" />
     <Compile Include="../../Core/GitRefs.cs" />
     <Compile Include="../../Core/ProjectGroup.cs" />
+    <Compile Include="../../Core/DiagramLink.cs" />
     <Compile Include="../../Core/BranchView.cs" />
     <Compile Include="../../Core/WorkspaceView.cs" />
     <Compile Include="../../Core/CoderClient.cs" />

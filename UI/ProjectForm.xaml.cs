@@ -4,6 +4,7 @@ using System.Windows.Input;
 using CoderMascot.Core;
 
 using Brush = System.Windows.Media.Brush;
+using UserControl = System.Windows.Controls.UserControl;
 
 namespace CoderMascot.UI;
 
@@ -28,7 +29,7 @@ public sealed record TargetRow(
 /// stopped workspace or a laptop off the VPN is a bad reason to be unable to
 /// write down a repository you already know you have.
 /// </summary>
-public partial class ProjectDialog : Window
+public partial class ProjectForm : UserControl, IDrawerForm
 {
     private readonly IBranchHost _host;
     private readonly ProjectDraft _draft;
@@ -47,7 +48,7 @@ public partial class ProjectDialog : Window
     /// The look around for repositories, separately cancellable.
     ///
     /// Its own token rather than sharing the check's: over `coder ssh` this is a
-    /// process with up to 45 seconds of patience, and closing the window has to
+    /// process with up to 45 seconds of patience, and closing the form has to
     /// end it — both so the connection goes away, and so nothing writes into a
     /// form that is no longer on screen.
     /// </summary>
@@ -74,14 +75,23 @@ public partial class ProjectDialog : Window
     /// <summary>Identity of the entry being replaced, or null for a new one.</summary>
     public string? Replacing => _draft.Replacing;
 
-    public ProjectDialog(IBranchHost host, ProjectDraft draft, IReadOnlyDictionary<string, string> taken)
+    public string Heading { get; private set; } = "Add a repository";
+
+    public string? Subheading =>
+        "Where the checkout is, and which of its branches your CI deploys from.";
+
+    public double PreferredWidth => 620;
+
+    public event EventHandler<bool>? Finished;
+
+    public ProjectForm(IBranchHost host, ProjectDraft draft, IReadOnlyDictionary<string, string> taken)
     {
         _host = host;
         _draft = draft;
         _taken = taken;
 
         // Before InitializeComponent: the radio button's IsChecked="True" fires
-        // its Checked handler while the window is still being built.
+        // its Checked handler while the form is still being built.
         _quiet = true;
         InitializeComponent();
 
@@ -105,18 +115,12 @@ public partial class ProjectDialog : Window
 
         if (!draft.IsNew)
         {
-            HeadTitle.Text = draft.Name.Trim().Length > 0 ? draft.Name : "Repository";
+            Heading = draft.Name.Trim().Length > 0 ? draft.Name : "Repository";
             BtnRemove.Visibility = Visibility.Visible;
             BtnSave.Content = "Save changes";
         }
 
         _quiet = false;
-
-        Closed += (_, _) =>
-        {
-            _work?.Cancel();
-            _scan?.Cancel();
-        };
 
         Loaded += (_, _) =>
         {
@@ -124,8 +128,6 @@ public partial class ProjectDialog : Window
 
             if (_draft.Path.Trim().Length == 0)
             {
-                PathBox.Focus();
-
                 // Nothing typed yet, so the useful thing to have on screen is a
                 // list of the repositories that are actually there.
                 if (_draft.Host != RepoHost.Remote) Discover(quietly: true);
@@ -135,6 +137,28 @@ public partial class ProjectDialog : Window
                 Check();
             }
         };
+    }
+
+    public void FocusFirst()
+    {
+        // A new repository starts at the folder. An existing one has nothing
+        // that wants typing first, and the name is the one box with no side effects.
+        if (_draft.Path.Trim().Length == 0) PathBox.Focus();
+        else NameBox.Focus();
+    }
+
+    public void Abandon() => StopWork();
+
+    private void StopWork()
+    {
+        _work?.Cancel();
+        _scan?.Cancel();
+    }
+
+    private void Finish(bool done)
+    {
+        StopWork();
+        Finished?.Invoke(this, done);
     }
 
     // ---------- where it lives ----------
@@ -238,7 +262,8 @@ public partial class ProjectDialog : Window
                 catch { /* a path that isn't one yet — start wherever Windows likes */ }
             }
 
-            if (picker.ShowDialog(this) != true) return;
+            var owner = Window.GetWindow(this);
+            if ((owner is null ? picker.ShowDialog() : picker.ShowDialog(owner)) != true) return;
 
             Use(picker.FolderName);
         }
@@ -457,7 +482,7 @@ public partial class ProjectDialog : Window
     /// Hand what was typed to Git's credential store. Null when it worked.
     ///
     /// The box is emptied on success. Keeping a token on screen after it has
-    /// been stored somewhere better serves nobody, and this window can be left
+    /// been stored somewhere better serves nobody, and this form can be left
     /// open on a desk for a long time.
     /// </summary>
     private async Task<string?> SignIn(CancellationToken ct)
@@ -543,7 +568,7 @@ public partial class ProjectDialog : Window
         {
             // Both, for the same reason the check restores both: these two share
             // a cancellation source, so one superseding the other must not leave
-            // the loser's button disabled for the life of the window.
+            // the loser's button disabled for the life of the form.
             if (!token.IsCancellationRequested)
             {
                 BtnTest.IsEnabled = true;
@@ -603,9 +628,9 @@ public partial class ProjectDialog : Window
     /// <summary>
     /// Enter in the group box means "done typing", not "save the form".
     ///
-    /// The dialog has a default button, so without this a new heading typed into
-    /// an editable combo would submit the window on the keystroke that finished
-    /// the word — before the box had committed the text it was holding.
+    /// The form has a default button, so without this a new heading typed into
+    /// an editable combo would submit it on the keystroke that finished the
+    /// word — before the box had committed the text it was holding.
     /// </summary>
     private void OnGroupKey(object sender, KeyEventArgs e)
     {
@@ -622,7 +647,7 @@ public partial class ProjectDialog : Window
         if (e.Key != Key.Enter) return;
 
         // Enter in either box means "add this one", not "save the form" — the
-        // default button would otherwise close the window mid-sentence.
+        // default button would otherwise close the form mid-sentence.
         e.Handled = true;
         OnAddTarget(sender, e);
     }
@@ -710,35 +735,29 @@ public partial class ProjectDialog : Window
         }
 
         Result = entry;
-        DialogResult = true;
-        Close();
+        Finish(true);
     }
 
     private void OnRemove(object sender, RoutedEventArgs e)
     {
         var name = _draft.Name.Trim().Length > 0 ? _draft.Name.Trim() : _draft.Path.Trim();
 
-        var sure = MessageBox.Show(
-            this,
-            $"Stop watching {name}?\n\nOnly this app's list changes \u2014 the folder and the repository "
-            + "on disk are left exactly as they are.",
-            "Remove repository",
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Question,
-            MessageBoxResult.Cancel);
+        var question = $"Stop watching {name}?\n\nOnly this app's list changes \u2014 the folder and the repository "
+                       + "on disk are left exactly as they are.";
+
+        var sure = Window.GetWindow(this) is { } owner
+            ? MessageBox.Show(owner, question, "Remove repository",
+                MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel)
+            : MessageBox.Show(question, "Remove repository",
+                MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
 
         if (sure != MessageBoxResult.OK) return;
 
         Removed = true;
-        DialogResult = true;
-        Close();
+        Finish(true);
     }
 
-    private void OnCancel(object sender, RoutedEventArgs e)
-    {
-        DialogResult = false;
-        Close();
-    }
+    private void OnCancel(object sender, RoutedEventArgs e) => Finish(false);
 
     // ---------- painting ----------
 

@@ -29,6 +29,28 @@ public static class CrashLog
     /// <summary>The most recent thing written, for the UI to offer to show.</summary>
     public static string? Last { get; private set; }
 
+    /// <summary>
+    /// The exception as text — except one from a database driver, which is written as
+    /// types and stacks only: MongoDB's messages can quote a whole connection string,
+    /// password included, and this file is one people open and paste.
+    /// </summary>
+    internal static string Describe(Exception? error)
+    {
+        if (error is null) return "(no exception object)";
+
+        var chain = new List<Exception>();
+        for (var e = error; e is not null && chain.Count < 10; e = e.InnerException) chain.Add(e);
+
+        if (!chain.Any(e => e.GetType().Namespace is { } ns
+                            && (ns.StartsWith("MongoDB", StringComparison.Ordinal) || ns.StartsWith("Microsoft.Data.SqlClient", StringComparison.Ordinal))))
+            return error.ToString();
+
+        var text = new StringBuilder();
+        foreach (var e in chain)
+            text.AppendLine($"{e.GetType().FullName} (message withheld)").AppendLine(e.StackTrace);
+        return text.ToString();
+    }
+
     /// <summary>Record one failure. Never throws — it is the last line of defence.</summary>
     public static void Write(string context, Exception? error)
     {
@@ -36,12 +58,12 @@ public static class CrashLog
             .Append("=== ").Append(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz"))
             .Append("  ").AppendLine(context)
             .Append("version ").Append(Version).Append("   os ").AppendLine(Environment.OSVersion.VersionString)
-            .AppendLine(error?.ToString() ?? "(no exception object)")
+            .AppendLine(Describe(error))
             .AppendLine()
             .ToString();
 
         Last = report;
-        Debug.WriteLine($"[CoderMascot] {context}: {error}");
+        Debug.WriteLine($"[CoderMascot] {context}: {Describe(error)}");
 
         try
         {

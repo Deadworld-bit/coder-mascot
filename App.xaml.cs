@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
@@ -9,7 +10,7 @@ using Microsoft.Win32;
 
 namespace CoderMascot;
 
-public partial class App : System.Windows.Application, IDashboardHost, IBranchHost
+public partial class App : System.Windows.Application, IDashboardHost, IBranchHost, ILogHost
 {
     private Mutex? _single;
     private CoderConfig? _cfg;
@@ -18,16 +19,25 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
     private SessionMonitor? _sessions;
     private SystemMonitor? _load;
     private LeftoverMonitor? _leftovers;
-    private DashboardWindow? _dashboard;
+    private RepoMonitor? _repoWatch;
+    private CiMonitor? _ciWatch;
+    private CiClient? _ci;
+    private LogMonitor? _logs;
+    private readonly ISecretBox _secrets = new DpapiSecretBox();
+    private MainWindow? _dashboard;
     private Reminder? _reminder;
     private NoteBook? _notes;
     private StickyBoard? _stickies;
-    private SetupWindow? _setup;
-    private BranchesWindow? _branches;
     private GitReader? _git;
 
     /// <summary>Last reading per project, so re-opening the window isn't a blank wait.</summary>
     private readonly Dictionary<string, ProjectSnapshot> _repos = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The background watch's last reading per project, for the nav count only. Kept
+    /// apart from <see cref="_repos"/>, which the window treats as recent and won't re-read.
+    /// </summary>
+    private readonly Dictionary<string, ProjectSnapshot> _watched = new(StringComparer.Ordinal);
     private HotkeyListener? _hotkey;
     private readonly StateHistory _history = new();
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
@@ -47,6 +57,28 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
 
     /// <summary>Most recent workspace reading, so session news can be merged into it.</summary>
     private WorkspaceSnapshot? _workspace;
+
+    /// <summary>
+    /// What the menus need from the display and can't ask it for: the state line,
+    /// whether there is anything to dismiss, and whether the session watch is
+    /// installed. Set where each reading is painted; the menus read them on open.
+    /// </summary>
+    private string _menuStatus = "Checking…";
+    private bool _dismissable;
+
+    /// <summary>
+    /// The session watch needs a workspace-side install, and until that has
+    /// happened it reports nothing at all — which is indistinguishable from
+    /// reporting that all is well. A watchdog is allowed to be quiet; it is not
+    /// allowed to be quiet because nobody plugged it in.
+    /// </summary>
+    private bool _sessionWatchMissing;
+
+    /// <summary>Deploy branches currently red, from the CI poll. Folded into the state.</summary>
+    private IReadOnlyList<BrokenDeploy> _broken = [];
+
+    /// <summary>Each repository's origin URL, resolved once — it rarely changes.</summary>
+    private readonly Dictionary<string, string?> _remoteCache = new(StringComparer.Ordinal);
 
     /// <summary>Something full-screen is running, so we're staying out of the way.</summary>
     private bool _suppressed;
@@ -74,6 +106,10 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
             CrashLog.Write("unobserved task", ex.Exception);
             ex.SetObserved();
         };
+
+        // The tray menu is WinForms, which would otherwise show its own error box
+        // for a throw in a click or a paint and leave nothing in the log.
+        System.Windows.Forms.Application.ThreadException += (_, ex) => CrashLog.Write("tray", ex.Exception);
 
         // A second instance would double every notification.
         _single = new Mutex(initiallyOwned: true, @"Local\CoderMascot.SingleInstance", out var isNew);
@@ -106,41 +142,30 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         _stickies = new StickyBoard(_cfg, _notes);
         _stickies.Changed += (_, _) => _dashboard?.RefreshNotes();
 
-        _tray = new TrayController([.. _crew.Select(m => m.Window)]);
+        _tray = new TrayController(BuildMenuState);
         _monitor = new StatusMonitor(_cfg);
         // The session watch reaches into the workspace over SSH, so it needs to
         // know when not to bother.
         _sessions = new SessionMonitor(_cfg, () => _monitor?.Latest?.State ?? MascotState.Unknown);
         _load = new SystemMonitor(_cfg);
         _leftovers = new LeftoverMonitor(_cfg);
+        _ci = new CiClient((target, tok) => GitRunners.ReadCiToken(_cfg, target.Site, tok));
+        _repoWatch = new RepoMonitor(_cfg, ReadForWatch);
+        _ciWatch = new CiMonitor(_cfg, ReadCi);
+        _logs = new LogMonitor(() => _cfg?.LogSources ?? [], () => _cfg?.LogPollSeconds ?? 5,
+            openTable: OpenLogTable, tablePollSeconds: () => (_cfg?.LogTablePollMinutes ?? 5) * 60);
         _reminder = new Reminder(_cfg.RemindAfterSeconds, _cfg.RemindMaxSeconds);
 
         _sessions.Changed += OnSessionsChanged;
         _load.Changed += OnLoadChanged;
         _leftovers.Changed += (_, _) => Dispatcher.BeginInvoke(Repaint);
+        _repoWatch.DeployMoved += OnDeployMoved;
+        _ciWatch.BrokenChanged += OnBrokenChanged;
+        _ciWatch.Finished += OnPipelinesFinished;
         _monitor.Changed += OnStatusChanged;
-        _tray.CheckRequested += (_, _) => _monitor.PollNow();
-        _tray.Acknowledged += (_, _) => Acknowledge();
-        _tray.AlertPolicyChanged += (_, policy) => SetAlertPolicy(policy);
-        _tray.DashboardRequested += (_, _) => ShowDashboard();
-        _tray.NoteRequested += (_, _) => NewSticky();
-        _tray.SetupRequested += (_, _) => ShowSetup();
-        _tray.BranchesRequested += (_, _) => ShowBranches();
+        _tray.MenuChosen += (_, entry) => OnMenu(entry, null);
 
         foreach (var member in _crew) Wire(member);
-
-        // Every menu shows the same setting, so seed them all from the file.
-        ShowAlertPolicy();
-
-        _tray.VisibilityToggled += (_, ev) =>
-        {
-            var member = _crew.FirstOrDefault(m => ReferenceEquals(m.Window, ev.Mascot));
-            if (member is null) return;
-
-            member.Wanted = ev.Visible;
-            member.Patrol.SetEnabled(ev.Visible && _cfg.Patrol && !_suppressed);
-            if (!ev.Visible) member.Bubble.Dismiss();
-        };
 
         // Hot-plugging a monitor or changing resolution invalidates every
         // coordinate every patrol is working from.
@@ -177,6 +202,9 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         _sessions.Start();
         _load.Start();
         _leftovers.Start();
+        _repoWatch.Start();
+        _ciWatch.Start();
+        _logs.Start();
 
         // Last line of defence. Every other guard tries to keep the poll loop
         // alive; this one makes it visible if the loop ever stops anyway, so a
@@ -241,10 +269,8 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
     {
         member.Patrol.Moved += (_, rect) => member.Bubble.FollowMascot(rect, ScreenBounds());
 
-        member.Window.CheckRequested += (_, _) => _monitor?.PollNow();
-
-        // The patrol toggle is in every character's own context menu, so it
-        // applies to the character you right-clicked, not to all of them.
+        // Parked while that character's menu is open, so the window doesn't walk
+        // out from under it.
         member.Window.PatrolToggled += (_, on) =>
             member.Patrol.SetEnabled(on && member.Wanted && !_suppressed);
 
@@ -260,23 +286,9 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         // just be the multi-character version of the thing being complained
         // about.
         member.Window.Acknowledged += (_, _) => Acknowledge();
-        member.Window.AlertPolicyChanged += (_, policy) => SetAlertPolicy(policy);
-        member.Window.DashboardRequested += (_, _) => ShowDashboard();
-        member.Window.NoteRequested += (_, _) => NewSticky();
-        member.Window.SetupRequested += (_, _) => ShowSetup();
-        member.Window.BranchesRequested += (_, _) => ShowBranches();
 
-        // One machine-wide setting shown in several menus: whichever one is used
-        // to change it, the others have to stop claiming otherwise.
-        member.Window.StartupChanged += (sender, on) =>
-        {
-            foreach (var other in _crew)
-            {
-                if (!ReferenceEquals(other.Window, sender)) other.Window.SetStartWithWindows(on);
-            }
-
-            _dashboard?.RefreshSettings();
-        };
+        member.Window.MenuSource = BuildMenuState;
+        member.Window.MenuChosen += (_, entry) => OnMenu(entry, member.Window);
     }
 
     // ---------- how much it's allowed to interrupt ----------
@@ -308,15 +320,7 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         _cfg.Notifications = AlertGate.Text(policy);
         _cfg.Save();
 
-        ShowAlertPolicy();
         Repaint();
-    }
-
-    /// <summary>Tick the same choice in every menu — each character has its own.</summary>
-    private void ShowAlertPolicy()
-    {
-        _tray?.SetAlertPolicy(_alerts.Policy);
-        foreach (var member in _crew) member.Window.SetAlertPolicy(_alerts.Policy);
     }
 
     /// <summary>
@@ -329,6 +333,253 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         if (ws is not null) Present(Combine(ws, _sessions?.Latest, _load?.Latest), notify: false);
     }
 
+    // ---------- the menus ----------
+
+    /// <summary>
+    /// Everything the mascot's menu and the tray's are built from, read fresh each
+    /// time either one opens. Nothing is pushed into a menu, so they can't
+    /// disagree.
+    /// </summary>
+    private MenuState BuildMenuState() => new(
+        _menuStatus,
+        _sessionWatchMissing,
+        _dismissable,
+        _alerts.Policy,
+        // Wanted, not Visibility: a full-screen app hides the crew without anyone asking for that.
+        [.. _crew.Select(m => new MenuCharacter(m.Character.Id, m.Character.Display, m.Wanted))],
+        _cfg?.Patrol ?? false,
+        _crew.Count > 0 && _crew[0].Window.IsClickThrough,
+        _cfg is { StartWithWindows: true } && StartupRegistration.IsEnabled(),
+        DiagramMenu.Build((_cfg?.Projects ?? []).Select(p => p.ToProject())));
+
+    /// <summary>
+    /// A line was chosen in either menu. <paramref name="origin"/> is the
+    /// character whose own menu it was, or null for the tray.
+    /// </summary>
+    private void OnMenu(MenuEntry entry, MascotWindow? origin)
+    {
+        if (_cfg is null) return;
+
+        switch (entry.Command)
+        {
+            case MenuCommand.SessionWatchHelp:
+                ShowSessionWatchHelp();
+                break;
+
+            case MenuCommand.Dismiss:
+                Acknowledge();
+                break;
+
+            case MenuCommand.Alerts:
+                if (Enum.TryParse(entry.Argument, out AlertPolicy policy) && Enum.IsDefined(policy))
+                {
+                    SetAlertPolicy(policy);
+
+                    // The Settings page shows the same choice.
+                    _dashboard?.RefreshSettings();
+                }
+                break;
+
+            case MenuCommand.OpenMain:
+                ShowDashboard();
+                break;
+
+            case MenuCommand.Projects:
+                ShowBranches();
+                break;
+
+            case MenuCommand.Diagram:
+                if (entry.Argument is { } target) OpenDiagram(target, origin);
+                break;
+
+            case MenuCommand.NewNote:
+                NewSticky();
+                break;
+
+            case MenuCommand.CheckNow:
+                _monitor?.PollNow();
+                break;
+
+            case MenuCommand.OpenCoder:
+                OpenCoderFromMenu(_cfg);
+                break;
+
+            case MenuCommand.Connect:
+                ShowSetup();
+                break;
+
+            case MenuCommand.EditConfig:
+                EditConfig(_cfg);
+                break;
+
+            case MenuCommand.ToggleMascot:
+                ToggleMascot(entry);
+                break;
+
+            case MenuCommand.Patrol:
+                TogglePatrol(entry);
+                break;
+
+            case MenuCommand.ClickThrough:
+                ToggleClickThrough(entry, origin);
+                break;
+
+            case MenuCommand.StartWithWindows:
+                ToggleStartup(entry);
+                break;
+
+            case MenuCommand.Quit:
+                // Before Shutdown(), which closes the window itself and would
+                // ask about unapplied settings on the way out.
+                _dashboard?.CloseForShutdown();
+                Shutdown();
+                break;
+        }
+    }
+
+    private static void ShowSessionWatchHelp()
+    {
+        MessageBox.Show(
+            "The mascot can also tell you when a Claude session is waiting for "
+            + "your confirmation, or has stopped making progress.\n\n"
+            + "That part runs inside the workspace and isn't installed yet. "
+            + "In a terminal in your Coder workspace:\n\n"
+            + "    bash ~/workspace/projects/coder-mascot/workspace/install-hooks.sh\n\n"
+            + "Then restart any Claude sessions already running, so they pick up "
+            + "the hooks.",
+            "Coder Mascot — session watch", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private static void OpenCoderFromMenu(CoderConfig cfg)
+    {
+        if (CoderUri(cfg) is { } uri) Shell(uri.AbsoluteUri);
+    }
+
+    /// <summary>
+    /// The Coder address, only if it parses as http(s). UseShellExecute means "ask
+    /// the shell what this string means", not "open a URL" — a config value of
+    /// \\host\share\payload.exe would be launched. Every shell-open of it comes here.
+    /// </summary>
+    private static Uri? CoderUri(CoderConfig? cfg) =>
+        Uri.TryCreate(cfg?.Url, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
+            ? uri
+            : null;
+
+    private static void EditConfig(CoderConfig cfg)
+    {
+        try
+        {
+            Directory.CreateDirectory(CoderConfig.Dir);
+            if (!File.Exists(CoderConfig.Path_)) cfg.Save();
+            Shell(CoderConfig.Path_);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not open config: {ex.Message}",
+                "Coder Mascot", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private static void Shell(string target)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not open {target}: {ex.Message}",
+                "Coder Mascot", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>
+    /// A reply to a click, so a failure is said whatever the noise level: the
+    /// user is looking straight at the mascot (or the tray), waiting for a
+    /// diagram to appear.
+    /// </summary>
+    private async void OpenDiagram(string target, MascotWindow? origin)
+    {
+        var problem = await Task.Run(() => DesktopActions.OpenDiagram(target));
+        if (problem is null) return;
+
+        if (origin is null)
+        {
+            _tray?.Notify("Couldn't open that diagram", problem);
+            return;
+        }
+
+        var member = _crew.FirstOrDefault(m => ReferenceEquals(m.Window, origin));
+
+        // The character may have been hidden or sent away while the disk
+        // answered, and a closed bubble throws if asked to speak.
+        if (member is null || !member.Wanted) return;
+
+        member.Bubble.Track(member.Frame, ScreenBounds());
+        member.Bubble.Say("Couldn't open that diagram", problem, sticky: false);
+    }
+
+    private void ToggleMascot(MenuEntry entry)
+    {
+        var member = _crew.FirstOrDefault(m => m.Character.Id == entry.Argument);
+        if (member is null || _cfg is null) return;
+
+        var on = entry.Checked != true;
+        member.Wanted = on;
+
+        var show = on && !_suppressed;
+        member.Window.Visibility = show ? Visibility.Visible : Visibility.Hidden;
+
+        // AllowsTransparency forces software rendering, so looping
+        // storyboards behind a hidden window burn CPU for nothing.
+        member.Window.SetAnimating(show);
+        member.Patrol.SetEnabled(show && _cfg.Patrol);
+        if (!on) member.Bubble.Dismiss();
+    }
+
+    private void TogglePatrol(MenuEntry entry)
+    {
+        if (_cfg is null) return;
+
+        _cfg.Patrol = entry.Checked != true;
+        _cfg.Save();
+
+        foreach (var member in _crew)
+            member.Patrol.SetEnabled(_cfg.Patrol && member.Wanted && !_suppressed);
+    }
+
+    private void ToggleClickThrough(MenuEntry entry, MascotWindow? origin)
+    {
+        var on = entry.Checked != true;
+        foreach (var member in _crew) member.Window.SetClickThrough(on);
+
+        // Once clicks pass through, the only way back is the tray menu.
+        if (on && origin is not null)
+        {
+            MessageBox.Show(
+                _crew.Count > 1
+                    ? "The mascots now ignore the mouse. Turn this off from the tray icon menu."
+                    : "The mascot now ignores the mouse. Turn this off from the tray icon menu.",
+                "Coder Mascot", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    private void ToggleStartup(MenuEntry entry)
+    {
+        var enable = entry.Checked != true;
+
+        if (ApplyStartWithWindows(enable) is { } problem)
+        {
+            MessageBox.Show($"Could not change startup setting: {problem}",
+                "Coder Mascot", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        // The Settings page shows the same switch.
+        _dashboard?.RefreshSettings();
+    }
+
     // ---------- the dashboard ----------
 
     /// <summary>
@@ -337,71 +588,41 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
     /// Kept alive once opened rather than rebuilt: it holds the settings fields
     /// and the scroll position, and closing it only hides it.
     /// </summary>
-    private void ShowDashboard(bool focusNotes = false)
+    private void ShowDashboard(bool focusNotes = false) => Dashboard().Summon(focusNotes);
+
+    private MainWindow Dashboard()
     {
         if (_dashboard is null)
         {
-            _dashboard = new DashboardWindow(this);
+            _dashboard = new MainWindow(this);
 
             // A closed WPF window cannot be shown again, so forget it and build
             // a fresh one next time rather than throwing on the second open.
             _dashboard.Closed += (_, _) => _dashboard = null;
         }
 
-        _dashboard.Summon(focusNotes);
+        return _dashboard;
     }
 
     /// <summary>
-    /// Ask for a Coder address and a token.
+    /// Ask for a Coder address and a token, in the main window's drawer.
     ///
     /// Never more than one of these: opened from a menu while the first-run copy
-    /// is already up, a second window would let two of them save different
-    /// credentials over each other.
+    /// is already up, a second form would let two of them save different
+    /// credentials over each other. The drawer holds one form at a time.
     /// </summary>
     private void ShowSetup()
     {
         if (_cfg is null) return;
 
-        if (_setup is not null)
-        {
-            _setup.Activate();
-            return;
-        }
-
-        _setup = new SetupWindow(_cfg);
-        _setup.Closed += (_, _) => _setup = null;
-        _setup.Connected += (_, _) =>
-        {
-            // The token is read per request, so the new one is already in use —
-            // but the workspace the old one resolved to is not necessarily this
-            // account's, and the poll loop is otherwise up to 20 seconds away
-            // from noticing any of it.
-            _monitor?.Reauthenticate();
-            _sessions?.CheckForStall();
-            _dashboard?.RefreshSettings();
-        };
-
-        _setup.Show();
-        _setup.Activate();
+        Dashboard().ShowConnect();
     }
 
     /// <summary>
-    /// Where work has got to, across every repository.
-    ///
-    /// Its own window rather than a dashboard panel: it answers a different
-    /// question on a different clock — the dashboard is about right now, this is
-    /// about the last few weeks — and it needs the width.
+    /// Where work has got to, across every repository: the Projects page of the
+    /// main window, which this opens (and creates, if it is not up).
     /// </summary>
-    private void ShowBranches()
-    {
-        if (_branches is null)
-        {
-            _branches = new BranchesWindow(this);
-            _branches.Closed += (_, _) => _branches = null;
-        }
-
-        _branches.Summon();
-    }
+    private void ShowBranches() => Dashboard().ShowProjects();
 
     IReadOnlyList<GitProject> IBranchHost.Projects =>
         [.. (_cfg?.Projects ?? []).Select(p => p.ToProject())];
@@ -425,6 +646,7 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         // and a long session spent correcting a path accumulates one per attempt.
         var live = _cfg.Projects.Select(p => p.ToProject().Id).ToHashSet(StringComparer.Ordinal);
         foreach (var gone in _repos.Keys.Where(id => !live.Contains(id)).ToList()) _repos.Remove(gone);
+        foreach (var gone in _watched.Keys.Where(id => !live.Contains(id)).ToList()) _watched.Remove(gone);
 
         return [.. _cfg.Projects.Select(p => p.ToProject())];
     }
@@ -445,7 +667,7 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
 
         // A URL-only repository has nothing to look at until it has been
         // downloaded once, so a failed fetch here is a failed check — unlike the
-        // Branches window, where a fetch failure still leaves a real reading on
+        // Projects page, where a fetch failure still leaves a real reading on
         // disk to fall back to.
         string? note = null;
 
@@ -505,10 +727,12 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
     /// <summary>
     /// Bring a repository up to date from its server. Null when it worked.
     ///
-    /// Only ever on the user's say-so, wherever it is called from: this talks to
-    /// the network, can ask for credentials, and on the first fetch of a
-    /// URL-only repository is minutes of real work — none of which belongs on a
-    /// window opening.
+    /// This talks to the network, can ask for credentials, and on the first fetch
+    /// of a URL-only repository is minutes of real work — so it never runs on a
+    /// window opening. Its callers are the user's own actions and the background
+    /// auto-fetch (<see cref="RepoMonitor"/>, on its slow timer), never a render
+    /// path. Those two can race on one repo; git's own lock makes one fail, which
+    /// surfaces as a "Fetch failed" note rather than anything corrupt.
     /// </summary>
     private async Task<FetchOutcome> Fetch(GitProject project, CancellationToken ct)
     {
@@ -694,12 +918,7 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
 
     void IDashboardHost.OpenCoder()
     {
-        // Same guard as the mascot's menu: UseShellExecute means "ask the shell
-        // what this string is", so only a parsed http(s) URI may reach it.
-        if (_cfg?.Url is not { } url ||
-            !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
-            return;
+        if (CoderUri(_cfg) is not { } uri) return;
 
         try
         {
@@ -722,11 +941,85 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
 
     void IDashboardHost.RescanLeftovers() => _leftovers?.ScanNow();
 
-    void IDashboardHost.ShowSetup() => ShowSetup();
+    void IDashboardHost.Reconnected()
+    {
+        // The token is read per request, so the new one is already in use —
+        // but the workspace the old one resolved to is not necessarily this
+        // account's, and the poll loop is otherwise up to 20 seconds away
+        // from noticing any of it.
+        _monitor?.Reauthenticate();
+        _sessions?.CheckForStall();
+        _dashboard?.RefreshSettings();
+    }
+
+    IBranchHost IDashboardHost.Branches => this;
+
+    ILogHost IDashboardHost.Logs => this;
+
+    IReadOnlyList<LogSourceEntry> ILogHost.Sources => _cfg?.LogSources ?? [];
+
+    LogMonitor ILogHost.Reader => _logs ?? throw new InvalidOperationException("The log reader starts with the app.");
+
+    IReadOnlyList<LogSourceEntry>? ILogHost.SaveSources(IReadOnlyList<LogSourceEntry> entries)
+    {
+        if (_cfg is null) return null;
+
+        _cfg.SetLogSources(entries);
+        var saved = _cfg.Save();
+        _logs?.ReadNow();
+        return saved ? _cfg.LogSources : null;
+    }
+
+    string ILogHost.Seal(string connection) => _secrets.Seal(connection);
+
+    string? ILogHost.HostOf(LogSourceEntry draft, string connection) =>
+        draft.Kind == LogSourceKinds.Mongo ? MongoLogReader.HostOf(connection, draft.Database) : SqlLogReader.HostOf(connection);
+
+    async Task<TableProbe> ILogHost.ProbeAsync(LogSourceEntry draft, string? connection, CancellationToken ct)
+    {
+        var plain = connection ?? (draft.Connection is { } saved ? _secrets.Open(saved) : null);
+        if (string.IsNullOrWhiteSpace(plain)) return new TableProbe("Paste the connection string.", null, [], [], []);
+
+        return draft.Kind == LogSourceKinds.Mongo
+            ? await MongoLogReader.ProbeAsync(plain, draft, ct).ConfigureAwait(false)
+            : await SqlLogReader.ProbeAsync(plain, draft, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A reader for a table source, its connection string opened only here, in memory.
+    /// One left in plain text by a hand edit is refused rather than used: using it would
+    /// make the plain copy look fine.
+    /// </summary>
+    private ILogTableReader OpenLogTable(LogSourceEntry source)
+    {
+        if (!LogSecrets.IsSealed(source.Connection))
+            throw new LogTableException("This connection string is stored as plain text. Open Edit and paste it again so it can be encrypted.");
+
+        var plain = _secrets.Open(source.Connection!)
+                    ?? throw new LogTableException("This connection string was saved by another Windows account or on another PC. Open Edit and paste it again.");
+
+        return source.Kind == LogSourceKinds.Mongo ? new MongoLogReader(plain, source) : new SqlLogReader(plain, source);
+    }
+
+    int IDashboardHost.OutstandingBranches
+    {
+        get
+        {
+            var newest = new Dictionary<string, ProjectSnapshot>(_watched, StringComparer.Ordinal);
+            foreach (var (id, snap) in _repos)
+            {
+                if (!newest.TryGetValue(id, out var other) || other.ReadAt < snap.ReadAt) newest[id] = snap;
+            }
+
+            return newest.Values.Sum(s => s.Ok ? s.Outstanding : 0);
+        }
+    }
 
     void IDashboardHost.SetAlertPolicy(AlertPolicy policy) => SetAlertPolicy(policy);
 
-    string? IDashboardHost.SetStartWithWindows(bool on)
+    string? IDashboardHost.SetStartWithWindows(bool on) => ApplyStartWithWindows(on);
+
+    private string? ApplyStartWithWindows(bool on)
     {
         if (_cfg is null) return "Not ready yet.";
 
@@ -735,9 +1028,6 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
 
         _cfg.StartWithWindows = on;
         _cfg.Save();
-
-        // Every menu shows the same switch, so none of them may be left lying.
-        foreach (var member in _crew) member.Window.SetStartWithWindows(on);
         return null;
     }
 
@@ -847,6 +1137,11 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         if (merged.State is not (MascotState.Connected or MascotState.Unknown))
             return merged;
 
+        // A red deploy branch is discrete and actionable, so it outranks the
+        // ambient housekeeping below — high load and leftovers are always there.
+        if (_broken.Count > 0)
+            return merged with { State = MascotState.PipelineFailed, Detail = CiWatch.Describe(_broken) };
+
         // The machine's own load comes first of the two, because it is costing
         // you speed *now* — a leftover is only costing you tidiness.
         if (load is { Loaded: true })
@@ -899,8 +1194,7 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         {
             // A watch that was never installed reports nothing, which on screen
             // is identical to a watch reporting that nothing is wrong. Say so.
-            foreach (var member in _crew)
-                member.Window.SetSessionWatchMissing(s.Ok && !s.Installed);
+            _sessionWatchMissing = s.Ok && !s.Installed;
 
             // Re-render the last workspace reading through the new session news,
             // rather than waiting for the next workspace poll.
@@ -933,6 +1227,109 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         {
             if (member.Wanted) member.Bubble.Say("Claude finished", text, sticky: false);
         }
+    }
+
+    // ---------- watched-repository pipelines ----------
+
+    private void OnBrokenChanged(object? sender, IReadOnlyList<BrokenDeploy> broken) =>
+        Dispatcher.BeginInvoke(() =>
+        {
+            // Repaint folds the red deploys into the state, colour and detail line.
+            _broken = broken;
+            Repaint();
+        });
+
+    private void OnPipelinesFinished(object? sender, IReadOnlyList<PipelineNews> news) =>
+        Dispatcher.BeginInvoke(() => AnnouncePipelines(news));
+
+    private void OnDeployMoved(object? sender, string line) =>
+        Dispatcher.BeginInvoke(() => AnnounceEvent("Deploy branch moved", line));
+
+    /// <summary>"Pipeline failed", or "N pipelines finished" — one-shot, like a session finishing.</summary>
+    private void AnnouncePipelines(IReadOnlyList<PipelineNews> news)
+    {
+        if (news.Count == 0) return;
+
+        var (title, text) = news.Count == 1
+            ? CiWatch.Describe(news[0].Project, news[0].Pipeline)
+            : CiWatch.Describe(news);
+
+        AnnounceEvent(title, text);
+    }
+
+    /// <summary>A one-shot toast and bubble, the same shape as "Claude finished".</summary>
+    private void AnnounceEvent(string title, string text)
+    {
+        _history.Note(text);
+
+        if (_suppressed || !_alerts.AllowToast(MascotState.Connected)) return;
+
+        _tray?.Notify(title, text);
+
+        foreach (var member in _crew)
+        {
+            if (member.Wanted) member.Bubble.Say(title, text, sticky: false);
+        }
+    }
+
+    /// <summary>
+    /// Fetch then read a repository for the background watch, without touching the
+    /// window's own cache. Runs on the monitor's loop thread, so it stays off the
+    /// dictionary the UI thread reads.
+    /// </summary>
+    private async Task<ProjectSnapshot> ReadForWatch(GitProject project, CancellationToken ct)
+    {
+        if (_git is null || _cfg is null)
+            return new ProjectSnapshot { Name = project.Name, Path = project.Path, Problem = "Not ready yet." };
+
+        // A fetch that couldn't reach the server does not invalidate what is on
+        // disk; read it either way, exactly as the window does.
+        try { await Fetch(project, ct); }
+        catch (OperationCanceledException) { throw; }
+        catch { /* read on-disk regardless */ }
+
+        var snapshot = await _git.ReadAsync(project, ct);
+
+        // The sweep may still hold a project the editor has just removed.
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (_cfg?.Projects.Any(p => p.ToProject().Id == project.Id) == true) _watched[project.Id] = snapshot;
+        });
+
+        return snapshot;
+    }
+
+    /// <summary>Resolve a repository's CI and read it, or null when it has none.</summary>
+    private async Task<CiSnapshot?> ReadCi(GitProject project, CancellationToken ct)
+    {
+        if (_ci is null || _cfg is null) return null;
+
+        string? remote = null;
+        if (project.Host != RepoHost.Remote && !_remoteCache.TryGetValue(project.Id, out remote))
+        {
+            remote = await RemoteUrl(project, ct);
+
+            // Cache only a real answer. RemoteUrl returns null on any git failure,
+            // including a workspace that was briefly unreachable over coder ssh;
+            // pinning that would leave CI dead for the repo until restart.
+            if (remote is not null) _remoteCache[project.Id] = remote;
+        }
+
+        return CiRemote.Resolve(project, remote) is { } target
+            ? await _ci.ReadAsync(project, target, ct)
+            : null;
+    }
+
+    private async Task<string?> RemoteUrl(GitProject project, CancellationToken ct)
+    {
+        if (_cfg is null) return null;
+        try
+        {
+            var seen = await GitRunners.For(_cfg)(project, ["remote", "get-url", "origin"], ct);
+            return seen.Ok ? seen.Text.Trim() : null;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { return null; }
     }
 
     private void OnLoadChanged(object? sender, LoadSnapshot load) =>
@@ -995,8 +1392,10 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
 
         // There is something to dismiss exactly when the mascot is still making
         // a fuss about it.
-        var dismissable = attention && !_alerts.IsAcknowledged(snap.State);
-        _tray?.SetDismissable(dismissable);
+        _dismissable = attention && !_alerts.IsAcknowledged(snap.State);
+
+        // MenuState holds plain text; each menu escapes it for its own toolkit.
+        _menuStatus = $"{snap.State.Title()} — {snap.WorkspaceName ?? "workspace"}";
 
         var park = _alerts.AllowPark(snap.State);
         var speak = _alerts.AllowBubble(snap.State);
@@ -1004,7 +1403,6 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         foreach (var member in _crew)
         {
             member.Window.Render(snap);
-            member.Window.SetDismissable(dismissable);
 
             // Stopping is the signal: patrol while healthy, go to a corner and
             // hang when there's something the user has to deal with.
@@ -1036,15 +1434,20 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
         if (_monitor is not null) _monitor.Changed -= OnStatusChanged;
         if (_sessions is not null) _sessions.Changed -= OnSessionsChanged;
         if (_load is not null) _load.Changed -= OnLoadChanged;
+        if (_repoWatch is not null) _repoWatch.DeployMoved -= OnDeployMoved;
+        if (_ciWatch is not null)
+        {
+            _ciWatch.BrokenChanged -= OnBrokenChanged;
+            _ciWatch.Finished -= OnPipelinesFinished;
+        }
 
         foreach (var member in _crew) member.Dispose();
 
-        _dashboard?.Close();
+        _dashboard?.CloseForShutdown();
 
         // Notes come down last and stay marked stuck, so the desktop comes back
         // as it was left. The dashboard commits its own edits as it closes;
         // saving again here is the backstop for a shutdown that skipped both.
-        _branches?.Close();
         _hotkey?.Dispose();
         _stickies?.Dispose();
         _notes?.Save();
@@ -1056,7 +1459,10 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
                 _sessions?.DisposeAsync().AsTask() ?? Task.CompletedTask,
                 _monitor?.DisposeAsync().AsTask() ?? Task.CompletedTask,
                 _load?.DisposeAsync().AsTask() ?? Task.CompletedTask,
-                _leftovers?.DisposeAsync().AsTask() ?? Task.CompletedTask
+                _leftovers?.DisposeAsync().AsTask() ?? Task.CompletedTask,
+                _repoWatch?.DisposeAsync().AsTask() ?? Task.CompletedTask,
+                _ciWatch?.DisposeAsync().AsTask() ?? Task.CompletedTask,
+                _logs?.DisposeAsync().AsTask() ?? Task.CompletedTask
             ).Wait(TimeSpan.FromSeconds(2));
         }
         catch
@@ -1064,6 +1470,7 @@ public partial class App : System.Windows.Application, IDashboardHost, IBranchHo
             // Shutting down anyway.
         }
 
+        _ci?.Dispose();
         _tray?.Dispose();
         _single?.Dispose();
         base.OnExit(e);

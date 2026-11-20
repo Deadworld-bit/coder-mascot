@@ -181,6 +181,27 @@ public sealed class CoderConfig
     /// <summary>Say so when a Claude session finishes its turn.</summary>
     [JsonPropertyName("announceFinished")] public bool AnnounceFinished { get; set; } = true;
 
+    // ---------- watched-repository pipelines ----------
+
+    /// <summary>
+    /// Fetch every watched repository this often, in minutes, so the branch and
+    /// merge readings stay current without opening a window. 0 or less turns it off.
+    /// </summary>
+    [JsonPropertyName("autoFetchMinutes")] public int AutoFetchMinutes { get; set; } = 10;
+
+    /// <summary>
+    /// Poll each repository's CI this often, in seconds. Clamped up from anything
+    /// impatient — a per-second poll gets you rate-limited, not informed. 0 or less
+    /// turns pipeline polling off.
+    /// </summary>
+    [JsonPropertyName("ciPollSeconds")] public int CiPollSeconds { get; set; } = 60;
+
+    /// <summary>Which finished pipelines to announce: "all", "failed", or "off".</summary>
+    [JsonPropertyName("announcePipelines")] public string AnnouncePipelines { get; set; } = "all";
+
+    /// <summary>Say so when a deploy branch moves — a merge reaching an environment.</summary>
+    [JsonPropertyName("announceDeploys")] public bool AnnounceDeploys { get; set; } = true;
+
     // ---------- how loud ----------
 
     /// <summary>
@@ -230,6 +251,22 @@ public sealed class CoderConfig
     /// to the groups that actually exist.
     /// </summary>
     [JsonPropertyName("collapsedGroups")] public string[] CollapsedGroups { get; set; } = [];
+
+    /// <summary>
+    /// Folders the Logs page reads. Written through <see cref="SetLogSources"/>,
+    /// so the form's output goes through the same sieve as the file's.
+    /// </summary>
+    [JsonPropertyName("logSources")] public LogSourceEntry[] LogSources { get; set; } = [];
+
+    /// <summary>How often the log folders are listed for new or changed files.</summary>
+    [JsonPropertyName("logPollSeconds")] public int LogPollSeconds { get; set; } = 5;
+
+    /// <summary>
+    /// How often a log table is asked for new rows: a production database is asked politely.
+    /// Minutes, under a name of its own: the build that read every 60 seconds wrote that into
+    /// every config as "logTablePollSeconds", where it would have outlived the new default.
+    /// </summary>
+    [JsonPropertyName("logTablePollMinutes")] public int LogTablePollMinutes { get; set; } = 5;
 
     [JsonPropertyName("coderCli")] public string CoderCli { get; set; } = "coder";
 
@@ -347,6 +384,10 @@ public sealed class CoderConfig
         cfg.Projects = NormalizeProjects(cfg.Projects);
         cfg.CollapsedGroups = ProjectGroups.Live(cfg.CollapsedGroups, cfg.Projects.Select(p => p.Group));
 
+        cfg.LogSources = LogSourceRules.Normalize(cfg.LogSources);
+        cfg.LogPollSeconds = Math.Clamp(cfg.LogPollSeconds, 2, 3600);
+        cfg.LogTablePollMinutes = Math.Clamp(cfg.LogTablePollMinutes, 1, 60);
+
         // A threshold of 0 or 100 is a warning that either never stops or never
         // starts; neither is a setting anyone wants, so keep them out of reach.
         cfg.CpuWarnPercent = Math.Clamp(cfg.CpuWarnPercent, 40, 99);
@@ -370,6 +411,12 @@ public sealed class CoderConfig
         if (cfg.RemindAfterSeconds != 0)
             cfg.RemindAfterSeconds = Math.Clamp(cfg.RemindAfterSeconds, 15, 86400);
         cfg.RemindMaxSeconds = Math.Clamp(cfg.RemindMaxSeconds, cfg.RemindAfterSeconds, 86400);
+
+        // 0 or less is off for both; the poll is clamped up from an impatient
+        // value rather than honoured, so a hand-edited 1 can't hammer the server.
+        cfg.AutoFetchMinutes = cfg.AutoFetchMinutes <= 0 ? 0 : Math.Clamp(cfg.AutoFetchMinutes, 1, 1440);
+        cfg.CiPollSeconds = cfg.CiPollSeconds <= 0 ? 0 : Math.Clamp(cfg.CiPollSeconds, 15, 3600);
+        cfg.AnnouncePipelines = CiWatch.Policy(cfg.AnnouncePipelines);
 
         // A one-time lift of the old single-mascot position onto the first
         // character, so upgrading doesn't teleport it back to the default corner.
@@ -428,6 +475,10 @@ public sealed class CoderConfig
         // heading nobody can see must not keep a fold that outlives it.
         CollapsedGroups = ProjectGroups.Live(CollapsedGroups, Projects.Select(p => p.Group));
     }
+
+    /// <summary>Replace the log sources, through the same sieve as the file.</summary>
+    public void SetLogSources(IEnumerable<LogSourceEntry?>? entries) =>
+        LogSources = LogSourceRules.Normalize(entries);
 
     /// <summary>Remember which headings are folded shut, through the same sieve.</summary>
     public void SetCollapsed(IEnumerable<string?>? keys) =>
@@ -532,7 +583,8 @@ public sealed class CoderConfig
         return true;
     }
 
-    public void Save()
+    /// <summary>Write the file. False when it couldn't be written; most callers can shrug that off.</summary>
+    public bool Save()
     {
         try
         {
@@ -553,10 +605,12 @@ public sealed class CoderConfig
             if (!TokenIsExternal && onDisk.Token is null) onDisk.Token = RejectedToken;
 
             File.WriteAllText(Path_, JsonSerializer.Serialize(onDisk, JsonOpts));
+            return true;
         }
         catch
         {
             // Losing a window position is not worth crashing over.
+            return false;
         }
     }
 

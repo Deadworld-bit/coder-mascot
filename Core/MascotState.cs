@@ -45,6 +45,9 @@ public enum MascotState
 
     /// <summary>An idle workspace, or dev servers left listening. Nothing is wrong.</summary>
     Leftovers = 11,
+
+    /// <summary>A deploy branch's pipeline is red. Your sessions are fine; a deploy isn't.</summary>
+    PipelineFailed = 12,
 }
 
 public static class MascotStateInfo
@@ -64,7 +67,8 @@ public static class MascotStateInfo
         || s is MascotState.AutoStopSoon
              or MascotState.NeedsConfirmation
              or MascotState.SessionStalled
-             or MascotState.ResourcesHigh;
+             or MascotState.ResourcesHigh
+             or MascotState.PipelineFailed;
 
     public static string Title(this MascotState s) => s switch
     {
@@ -75,6 +79,7 @@ public static class MascotStateInfo
         MascotState.SessionStalled => "Session looks stuck",
         MascotState.ResourcesHigh => "This machine is straining",
         MascotState.Leftovers => "Still running",
+        MascotState.PipelineFailed => "Pipeline failed",
         MascotState.Unreachable => "Can't reach Coder",
         MascotState.Unauthorized => "Session token rejected",
         MascotState.AgentLost => "Workspace agent lost",

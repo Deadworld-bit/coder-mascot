@@ -1,0 +1,292 @@
+<UserControl x:Class="CoderMascot.UI.LogSourceForm"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:CoderMascot.UI"
+             KeyDown="OnFormKey">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <!-- Merged here, not left to the main window: a control parses its
+                 markup before it has a parent. -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/UI/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- A column's name, and its type set back: the type is there to tell
+                 two similar names apart, not to be read. -->
+            <DataTemplate x:Key="ColumnChoiceTemplate">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding Label, Mode=OneTime}" />
+                    <TextBlock Text="{Binding Type, Mode=OneTime}" Foreground="{StaticResource Dim}"
+                               FontSize="{StaticResource TextLabel}" Margin="8,0,0,0"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </DataTemplate>
+
+            <Style x:Key="RoleLabel" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource Ink2}" />
+                <Setter Property="FontSize" Value="{StaticResource TextSmall}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style x:Key="RoleBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Margin" Value="0,8,0,0" />
+                <Setter Property="ItemTemplate" Value="{StaticResource ColumnChoiceTemplate}" />
+                <EventSetter Event="SelectionChanged" Handler="OnRoleChanged" />
+            </Style>
+
+            <!-- The same row the Logs list draws, without the file column. -->
+            <DataTemplate x:Key="PreviewRowTemplate">
+                <Border Height="28" BorderBrush="{StaticResource Hair}" BorderThickness="0,0,0,1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="112" />
+                            <ColumnDefinition Width="46" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="{Binding When, Mode=OneTime}"
+                                   Style="{StaticResource Figure}" Margin="10,0,0,0"
+                                   VerticalAlignment="Center" />
+
+                        <Border Grid.Column="1" Width="36" Height="18" CornerRadius="4"
+                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Background="{Binding PillBack, Mode=OneTime}">
+                            <TextBlock Text="{Binding Pill, Mode=OneTime}" FontFamily="{StaticResource FaceMono}"
+                                       FontSize="{StaticResource TextLabel}" FontWeight="SemiBold"
+                                       Foreground="{Binding PillInk, Mode=OneTime}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+
+                        <TextBlock Grid.Column="2" Text="{Binding Preview, Mode=OneTime}"
+                                   Foreground="{Binding Ink, Mode=OneTime}"
+                                   FontSize="{StaticResource TextSmall}" TextTrimming="CharacterEllipsis"
+                                   Margin="4,0,12,0" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- footer: the destructive action kept well away from the one you press most -->
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource DrawerFooter}">
+            <Grid>
+                <Grid x:Name="FooterMain">
+                    <Button x:Name="BtnRemove" Content="Remove" Style="{StaticResource Danger}"
+                            HorizontalAlignment="Left" Click="OnRemove" Visibility="Collapsed"
+                            ToolTip="Stops reading this folder. Nothing on disk is touched." />
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Cancel" Click="OnCancel" Margin="{StaticResource GapAfter}" />
+                        <Button x:Name="BtnSave" Content="Save" Style="{StaticResource Primary}"
+                                Click="OnSave" IsDefault="True" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Asked here and not in a dialog box: the form is the only thing on
+                     screen to answer, and Escape takes it back. -->
+                <Grid x:Name="FooterSure" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock x:Name="SureText" Grid.Column="0" Style="{StaticResource Prose}"
+                               VerticalAlignment="Center" Margin="0,0,16,0" />
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BtnKeep" Content="Keep it" Click="OnKeep"
+                                Margin="{StaticResource GapAfter}" />
+                        <Button x:Name="BtnSure" Content="Remove" Style="{StaticResource Danger}"
+                                Click="OnSure" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="22,4,22,18">
+            <StackPanel>
+
+                <!-- 0 · what kind. Chosen once: an existing source can't change kind,
+                     because its id, its reader and its saved settings are all the kind's. -->
+                <TextBlock Text="TYPE" Style="{StaticResource SectionTop}" Margin="0,14,0,6" />
+                <Border x:Name="KindPick" HorizontalAlignment="Left" Padding="2"
+                        Background="{StaticResource Sunk}" BorderBrush="{StaticResource Line}"
+                        BorderThickness="1" CornerRadius="6">
+                    <UniformGrid Rows="1" AutomationProperties.Name="Type of log source">
+                        <RadioButton x:Name="KindFolder" Content="Folder" GroupName="Kind"
+                                     Style="{StaticResource Segment}" Checked="OnKindChecked" />
+                        <RadioButton x:Name="KindSql" Content="SQL Server table" GroupName="Kind"
+                                     Style="{StaticResource Segment}" Checked="OnKindChecked" />
+                        <RadioButton x:Name="KindMongo" Content="MongoDB collection" GroupName="Kind"
+                                     Style="{StaticResource Segment}" Checked="OnKindChecked" />
+                    </UniformGrid>
+                </Border>
+                <TextBlock x:Name="KindFixed" FontWeight="SemiBold" Visibility="Collapsed" />
+
+                <!-- 1 · folder -->
+                <StackPanel x:Name="FolderPane">
+                    <TextBlock Text="FOLDER" Style="{StaticResource SectionTop}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBox Grid.Column="0" x:Name="FolderBox" FontFamily="{StaticResource FaceMono}"
+                                 AutomationProperties.Name="Folder" TextChanged="OnFolderTyped" />
+                        <Button Grid.Column="1" Content="Browse…" Margin="{StaticResource GapBefore}"
+                                Click="OnBrowse" />
+                    </Grid>
+
+                    <!-- what the check found: why it won't do, or what saving will do -->
+                    <TextBlock x:Name="FolderNote" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Visibility="Collapsed" />
+                    <TextBlock Style="{StaticResource Prose}" Margin="0,5,0,0"
+                               Text="A folder on this PC. Logs often hold personal data, so avoid synced or shared folders." />
+                </StackPanel>
+
+                <!-- 1 · table: where it is, and whether the connection works -->
+                <StackPanel x:Name="ConnectPane" Visibility="Collapsed">
+                    <TextBlock x:Name="ConnHead" Text="CONNECTION STRING" Style="{StaticResource SectionTop}" />
+
+                    <!-- Masked, and the hint drawn here: the PasswordBox has none of its own. -->
+                    <Grid>
+                        <PasswordBox x:Name="ConnBox" AutomationProperties.Name="Connection string"
+                                     PasswordChanged="OnConnTyped" KeyDown="OnConnKey" />
+                        <TextBlock x:Name="ConnHint" Foreground="{StaticResource Dim}" IsHitTestVisible="False"
+                                   Margin="11,0,10,0" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                    <TextBlock x:Name="ConnHelp" Style="{StaticResource Prose}" Margin="0,5,0,0" />
+
+                    <StackPanel x:Name="DatabasePane" Visibility="Collapsed">
+                        <TextBlock Text="DATABASE" Style="{StaticResource SectionTop}" />
+                        <TextBox x:Name="DbBox" AutomationProperties.Name="Database" TextChanged="OnDbTyped"
+                                 ui:Field.Hint="Only if the connection string doesn't name it." />
+                    </StackPanel>
+
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button x:Name="BtnTest" Grid.Column="0" Content="Test connection" Click="OnTest"
+                                VerticalAlignment="Top" MinWidth="120" />
+                        <TextBlock x:Name="TestNote" Grid.Column="1" TextWrapping="Wrap" Margin="12,0,0,0"
+                                   VerticalAlignment="Center" Visibility="Collapsed" />
+                    </Grid>
+
+                    <TextBlock x:Name="TableHead" Text="TABLE" Style="{StaticResource SectionTop}" />
+
+                    <!-- Typed text is taken as typed: the list is for picking, and an
+                         auto-completing box would finish "dbo.Log" into some other table. -->
+                    <ComboBox x:Name="TableBox" IsEditable="True" IsTextSearchEnabled="False"
+                              Style="{StaticResource Ref}" Height="32"
+                              AutomationProperties.Name="Table"
+                              TextBoxBase.TextChanged="OnTableTyped" SelectionChanged="OnTablePicked"
+                              KeyDown="OnTableKey" IsKeyboardFocusWithinChanged="OnTableFocus" />
+                    <TextBlock x:Name="TableHelp" Style="{StaticResource Prose}" Margin="0,5,0,0" />
+                </StackPanel>
+
+                <!-- 2 · name -->
+                <TextBlock Text="NAME" Style="{StaticResource SectionTop}" />
+                <TextBox x:Name="NameBox" AutomationProperties.Name="Name"
+                         ui:Field.Hint="The folder's name" />
+                <TextBlock x:Name="NameNote" Style="{StaticResource Prose}" Margin="0,5,0,0"
+                           Text="Optional. What it's called in the list. Taken from the folder unless you change it." />
+
+                <!-- 3 · files -->
+                <StackPanel x:Name="FilesPane">
+                    <TextBlock Text="FILES" Style="{StaticResource SectionTop}" />
+                    <TextBox x:Name="FilesBox" FontFamily="{StaticResource FaceMono}"
+                             AutomationProperties.Name="Files" TextChanged="OnFilesTyped" />
+                    <TextBlock x:Name="FilesNote" Style="{StaticResource Prose}" Margin="0,5,0,0" />
+                </StackPanel>
+
+                <!-- 3 · table: which column is which, and what comes out of it -->
+                <StackPanel x:Name="ColumnsPane" Visibility="Collapsed">
+                    <TextBlock x:Name="ColumnsHead" Text="COLUMNS" Style="{StaticResource SectionTop}" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="92" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Id" Style="{StaticResource RoleLabel}" />
+                        <ComboBox Grid.Row="0" Grid.Column="1" x:Name="RoleId" Style="{StaticResource RoleBox}"
+                                  Margin="0" AutomationProperties.Name="Id column" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Prose}" Margin="0,5,0,0"
+                                   Text="A number that counts up, so only new rows are read. Without one, the newest 1,000 rows by time are read again each time." />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Time" Style="{StaticResource RoleLabel}" />
+                        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="RoleTime" Style="{StaticResource RoleBox}"
+                                  AutomationProperties.Name="Time column" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Level" Style="{StaticResource RoleLabel}" />
+                        <ComboBox Grid.Row="3" Grid.Column="1" x:Name="RoleLevel" Style="{StaticResource RoleBox}"
+                                  AutomationProperties.Name="Level column" />
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Message" Style="{StaticResource RoleLabel}" />
+                        <ComboBox Grid.Row="4" Grid.Column="1" x:Name="RoleMessage" Style="{StaticResource RoleBox}"
+                                  AutomationProperties.Name="Message column" />
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Exception" Style="{StaticResource RoleLabel}" />
+                        <ComboBox Grid.Row="5" Grid.Column="1" x:Name="RoleException" Style="{StaticResource RoleBox}"
+                                  AutomationProperties.Name="Exception column" />
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Properties" Style="{StaticResource RoleLabel}" />
+                        <ComboBox Grid.Row="6" Grid.Column="1" x:Name="RoleProperties" Style="{StaticResource RoleBox}"
+                                  AutomationProperties.Name="Properties column" />
+
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Logger" Style="{StaticResource RoleLabel}" />
+                        <ComboBox Grid.Row="7" Grid.Column="1" x:Name="RoleLogger" Style="{StaticResource RoleBox}"
+                                  AutomationProperties.Name="Logger column" />
+                    </Grid>
+
+                    <TextBlock x:Name="ColumnsNote" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed" />
+
+                    <CheckBox x:Name="UtcBox" Content="Times in this column are UTC" Margin="0,14,0,0"
+                              Click="OnUtcClicked" />
+
+                    <!-- Shown once the columns are known. Dimmed, not hidden, when the
+                         mapping has changed since it was read. -->
+                    <StackPanel x:Name="PreviewPane" Visibility="Collapsed">
+                        <Grid Margin="{StaticResource GapSection}">
+                            <TextBlock Text="PREVIEW" Style="{StaticResource SectionHead}" VerticalAlignment="Center" />
+                            <Button x:Name="BtnPreview" Content="Refresh preview" Style="{StaticResource Quiet}"
+                                    HorizontalAlignment="Right" Click="OnRefreshPreview" />
+                        </Grid>
+
+                        <Border x:Name="PreviewFrame" Background="{StaticResource Rail}"
+                                BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6">
+                            <ItemsControl x:Name="PreviewList" ItemTemplate="{StaticResource PreviewRowTemplate}"
+                                          Margin="1" AutomationProperties.Name="Preview rows" />
+                        </Border>
+                        <TextBlock x:Name="PreviewNote" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Visibility="Collapsed" />
+                    </StackPanel>
+
+                    <TextBlock x:Name="SaveNote" TextWrapping="Wrap" Margin="0,14,0,0" Visibility="Collapsed" />
+                </StackPanel>
+
+                <TextBlock x:Name="FailureNote" Foreground="{StaticResource BadInk}" TextWrapping="Wrap"
+                           Margin="0,14,0,0" Visibility="Collapsed" />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

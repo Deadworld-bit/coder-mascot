@@ -67,6 +67,25 @@ public sealed class GitProject
         Primary is { Length: > 0 } named && Deployed.ContainsKey(named)
             ? named
             : Deployed.Keys.FirstOrDefault();
+
+    /// <summary>
+    /// How this repository's pipelines are found: Auto (worked out from the
+    /// remote), Off, or a provider named outright. Auto is the default, and is
+    /// what a config written before pipelines existed reads back as.
+    /// </summary>
+    public CiKind Ci { get; init; } = CiKind.Auto;
+
+    /// <summary>
+    /// The CI server, when it can't be read from a remote — a workspace or local
+    /// checkout whose origin the desktop can't see. Null means "read it".
+    /// </summary>
+    public string? CiUrl { get; init; }
+
+    /// <summary>The project path on that server, e.g. "team/app", when it must be given.</summary>
+    public string? CiProject { get; init; }
+
+    /// <summary>Diagrams linked to this repository, in the order they were added.</summary>
+    public IReadOnlyList<DiagramLink> Diagrams { get; init; } = [];
 }
 
 /// <summary>Whether a ref exists here, there, or both.</summary>
@@ -413,6 +432,22 @@ public sealed class ProjectEntry
     [System.Text.Json.Serialization.JsonPropertyName("group")]
     public string? Group { get; set; }
 
+    /// <summary>How pipelines are found: "gitlab", "github", "off", or absent for auto.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("ci")]
+    public string? Ci { get; set; }
+
+    /// <summary>The CI server, when it can't be read from a remote. Stored as https://host.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("ciUrl")]
+    public string? CiUrl { get; set; }
+
+    /// <summary>The project path on that server, e.g. "team/app".</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("ciProject")]
+    public string? CiProject { get; set; }
+
+    /// <summary>Diagrams linked to this repository. Absent when there are none.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("diagrams")]
+    public DiagramLink[]? Diagrams { get; set; }
+
     /// <summary>Fill in what can be inferred, drop what can't be used.</summary>
     public ProjectEntry Tidy()
     {
@@ -458,7 +493,34 @@ public sealed class ProjectEntry
 
         Group = ProjectGroups.Clean(Group);
 
+        // One spelling; auto is the default and is never written, so a config
+        // from before pipelines existed (no "ci" key) reads back as auto.
+        Ci = (Ci ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "gitlab" => "gitlab",
+            "github" => "github",
+            "off" or "none" => "off",
+            _ => null,
+        };
+
+        // Stored the way it will be used, and a value git would read as a command
+        // is dropped rather than saved — see CiRemote.CleanServer.
+        CiUrl = CiRemote.CleanServer(CiUrl);
+
+        var ciProject = CiProject?.Trim().Trim('/');
+        CiProject = string.IsNullOrEmpty(ciProject) ? null : ciProject;
+
+        Diagrams = DiagramLink.TidyAll(Diagrams);
+
         return this;
+    }
+
+    /// <summary>A copy with another diagram list, so the live entry changes only when the list is saved.</summary>
+    public ProjectEntry WithDiagrams(IEnumerable<DiagramLink?>? diagrams)
+    {
+        var copy = (ProjectEntry)MemberwiseClone();
+        copy.Diagrams = DiagramLink.TidyAll(diagrams);
+        return copy;
     }
 
     public GitProject ToProject() => new()
@@ -474,5 +536,15 @@ public sealed class ProjectEntry
         Deployed = Deployed ?? new Dictionary<string, string>(),
         Primary = Primary,
         Group = Group,
+        Ci = (Ci ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "gitlab" => CiKind.GitLab,
+            "github" => CiKind.GitHub,
+            "off" or "none" => CiKind.Off,
+            _ => CiKind.Auto,
+        },
+        CiUrl = CiUrl,
+        CiProject = CiProject,
+        Diagrams = Diagrams ?? [],
     };
 }
